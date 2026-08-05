@@ -65,7 +65,7 @@ const sidebarResponse = [
         ],
         screens: [],
       },
-            {
+        {
         featureId: "employee-role",
         featureName: "Employees + Role",
         icon: "users",

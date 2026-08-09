@@ -157,7 +157,7 @@ export function AppSidebar(
       className={cn(props.className)}
     >
       <SidebarHeader>
-        {/* <TeamSwitcher teams={staticData.teams} /> */}
+        <TeamSwitcher />
       </SidebarHeader>
 
       <SidebarContent>
@@ -165,7 +165,7 @@ export function AppSidebar(
       </SidebarContent>
 
       <SidebarFooter>
-        <NavUser user={staticData.user} />
+        <NavUser/>
       </SidebarFooter>
 
       <SidebarRail />

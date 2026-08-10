@@ -4,6 +4,7 @@ import DashboardLayout from "@/layouts/DashboardLayout";
 import Dashboard from "@/pages/Dashboard/Dashboard";
 import LoginPage from "@/pages/AuthPages/LoginPage";
 import OrganizationsPage from "@/pages/TenantManagement/Organization/OrganizationsPage";
+import AddOrganizationPage from "@/pages/TenantManagement/Organization/AddOrganizationPage";
 
 
 export default function AppRoutes() {
@@ -13,6 +14,7 @@ export default function AppRoutes() {
       <Route element={<DashboardLayout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/organizations" element={<OrganizationsPage/>} />
+        <Route path="/organizations/new" element={<AddOrganizationPage/>} />
       </Route>
     </Routes>
   );

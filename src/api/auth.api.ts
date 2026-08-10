@@ -9,7 +9,7 @@ export const loginApi = async (
   data: LoginRequest
 ) => {
   const response = await api.post(
-    "/api/v1/users/login",
+    "/api/v1/login",
     data
   );
 

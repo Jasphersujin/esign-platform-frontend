@@ -5,6 +5,8 @@ import Dashboard from "@/pages/Dashboard/Dashboard";
 import LoginPage from "@/pages/AuthPages/LoginPage";
 import OrganizationsPage from "@/pages/TenantManagement/Organization/OrganizationsPage";
 import AddOrganizationPage from "@/pages/TenantManagement/Organization/AddOrganizationPage";
+import EditOrganizationPage from "@/pages/TenantManagement/Organization/EditOrganizationsPage";
+import ViewOrganizationPage from "@/pages/TenantManagement/Organization/ViewOrganizationPage";
 
 
 export default function AppRoutes() {
@@ -15,6 +17,8 @@ export default function AppRoutes() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/organizations" element={<OrganizationsPage/>} />
         <Route path="/organizations/new" element={<AddOrganizationPage/>} />
+        <Route path="/organizations/:id/edit" element={<EditOrganizationPage/>} />
+        <Route path="/organizations/:id" element={<ViewOrganizationPage/>} />
       </Route>
     </Routes>
   );

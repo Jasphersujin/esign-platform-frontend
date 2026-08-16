@@ -1,23 +1,3 @@
-// import { Outlet } from "react-router-dom";
-
-// import { AppSidebar } from "@/components/app-sidebar";
-// import {
-//   SidebarInset,
-//   SidebarProvider,
-// } from "@/components/ui/sidebar";
-
-// export default function DashboardLayout() {
-//   return (
-//     <SidebarProvider>
-//       <AppSidebar />
-
-//       <SidebarInset>
-//         <Outlet />
-//       </SidebarInset>
-//     </SidebarProvider>
-//   );
-// }
-
 import { Outlet } from "react-router-dom";
 import {
   Bell,
@@ -40,7 +20,7 @@ export default function DashboardLayout() {
     <SidebarProvider>
       <AppSidebar />
 
-      <SidebarInset>
+      <SidebarInset className="min-w-0 flex-1 overflow-x-hidden">
         {/* ========================================= */}
         {/* TOP HEADER */}
         {/* ========================================= */}

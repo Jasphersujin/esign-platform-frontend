@@ -396,6 +396,32 @@ const COUNTRY_CODES = [
    API TYPES
 ============================================================ */
 
+interface OrganizationContact {
+
+  id?: string;
+
+  firstName?: string;
+
+  lastName?: string | null;
+
+  designation?: string;
+
+  email?: string;
+
+  countryCode?: string;
+
+  phoneNumber?: string;
+
+  primary?: boolean;
+
+  active?: boolean;
+
+  effectiveFrom?: string;
+
+  effectiveTo?: string | null;
+
+}
+
 interface OrganizationResponse {
 
   id: string;
@@ -420,23 +446,7 @@ interface OrganizationResponse {
 
   businessType?: string;
 
-  contact?: {
-
-    firstName?: string;
-
-    lastName?: string | null;
-
-    designation?: string;
-
-    email?: string;
-
-    countryCode?: string;
-
-    phoneNumber?: string;
-
-    primary?: boolean;
-
-  };
+  contacts?: OrganizationContact[];
 
 }
 
@@ -600,6 +610,12 @@ export default function EditOrganizationPage() {
             );
 
 
+          console.log(
+            "GET ORGANIZATION RESPONSE:",
+            response.data
+          );
+
+
           /*
            * Supports:
            *
@@ -618,8 +634,35 @@ export default function EditOrganizationPage() {
             response.data;
 
 
+          /*
+           * BACKEND RETURNS:
+           *
+           * contacts: [
+           *   {
+           *     firstName: "Jaspher",
+           *     ...
+           *     primary: true
+           *   }
+           * ]
+           *
+           * Select the primary contact first.
+           *
+           * If no contact is marked primary,
+           * fall back to the first contact.
+           */
+
           const contact =
-            organization.contact;
+            organization.contacts?.find(
+              (item) =>
+                item.primary === true
+            ) ??
+            organization.contacts?.[0];
+
+
+          console.log(
+            "MAPPED PRIMARY CONTACT:",
+            contact
+          );
 
 
           /* ----------------------------------------------------
@@ -757,11 +800,13 @@ export default function EditOrganizationPage() {
               ?.response
               ?.data
               ?.message ??
-              error
-                ?.response
-                ?.data
-                ?.error ??
-              "Failed to load organization."
+
+            error
+              ?.response
+              ?.data
+              ?.error ??
+
+            "Failed to load organization."
 
           );
 
@@ -1009,6 +1054,16 @@ export default function EditOrganizationPage() {
 
         businessType:
           values.businessType,
+
+        /*
+         * Keep this as `contact` because this is
+         * the payload structure currently used
+         * by your existing update API code.
+         *
+         * The GET API returns `contacts[]`, but
+         * that does not automatically mean the
+         * PUT API expects `contacts[]`.
+         */
 
         contact: {
 
@@ -1268,16 +1323,18 @@ export default function EditOrganizationPage() {
 
               <div className="flex items-center gap-3">
 
-                <div className="
-                  flex
-                  h-10
-                  w-10
-                  shrink-0
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-primary/10
-                ">
+                <div
+                  className="
+                    flex
+                    h-10
+                    w-10
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-lg
+                    bg-primary/10
+                  "
+                >
 
                   <Building2
                     className="
@@ -1318,11 +1375,13 @@ export default function EditOrganizationPage() {
                   LOGO + NAME
               ============================================ */}
 
-              <div className="
-                grid
-                gap-6
-                md:grid-cols-[140px_1fr]
-              ">
+              <div
+                className="
+                  grid
+                  gap-6
+                  md:grid-cols-[140px_1fr]
+                "
+              >
 
                 {/* LOGO */}
 
@@ -1337,11 +1396,13 @@ export default function EditOrganizationPage() {
 
                     {logoPreview ? (
 
-                      <div className="
-                        relative
-                        h-28
-                        w-28
-                      ">
+                      <div
+                        className="
+                          relative
+                          h-28
+                          w-28
+                        "
+                      >
 
                         <img
                           src={
@@ -1460,12 +1521,14 @@ export default function EditOrganizationPage() {
                   </div>
 
 
-                  <p className="
-                    mt-2
-                    text-[11px]
-                    leading-4
-                    text-muted-foreground
-                  ">
+                  <p
+                    className="
+                      mt-2
+                      text-[11px]
+                      leading-4
+                      text-muted-foreground
+                    "
+                  >
 
                     JPG, PNG or WEBP
                     <br />
@@ -1500,10 +1563,12 @@ export default function EditOrganizationPage() {
 
                         Organization Name
 
-                        <span className="
-                          ml-1
-                          text-destructive
-                        ">
+                        <span
+                          className="
+                            ml-1
+                            text-destructive
+                          "
+                        >
                           *
                         </span>
 
@@ -1567,10 +1632,12 @@ export default function EditOrganizationPage() {
 
                       Business Type
 
-                      <span className="
-                        ml-1
-                        text-destructive
-                      ">
+                      <span
+                        className="
+                          ml-1
+                          text-destructive
+                        "
+                      >
                         *
                       </span>
 
@@ -1653,12 +1720,14 @@ export default function EditOrganizationPage() {
 
               <div>
 
-                <div className="
-                  mb-4
-                  flex
-                  items-center
-                  gap-2
-                ">
+                <div
+                  className="
+                    mb-4
+                    flex
+                    items-center
+                    gap-2
+                  "
+                >
 
                   <MapPin
                     className="
@@ -1668,10 +1737,12 @@ export default function EditOrganizationPage() {
                     "
                   />
 
-                  <h3 className="
-                    text-sm
-                    font-medium
-                  ">
+                  <h3
+                    className="
+                      text-sm
+                      font-medium
+                    "
+                  >
 
                     Business Address
 
@@ -1680,11 +1751,13 @@ export default function EditOrganizationPage() {
                 </div>
 
 
-                <div className="
-                  grid
-                  gap-5
-                  md:grid-cols-2
-                ">
+                <div
+                  className="
+                    grid
+                    gap-5
+                    md:grid-cols-2
+                  "
+                >
 
                   {/* COUNTRY */}
 
@@ -1710,10 +1783,12 @@ export default function EditOrganizationPage() {
 
                           Country
 
-                          <span className="
-                            ml-1
-                            text-destructive
-                          ">
+                          <span
+                            className="
+                              ml-1
+                              text-destructive
+                            "
+                          >
                             *
                           </span>
 
@@ -1773,10 +1848,12 @@ export default function EditOrganizationPage() {
 
                           State
 
-                          <span className="
-                            ml-1
-                            text-destructive
-                          ">
+                          <span
+                            className="
+                              ml-1
+                              text-destructive
+                            "
+                          >
                             *
                           </span>
 
@@ -1836,10 +1913,12 @@ export default function EditOrganizationPage() {
 
                           City
 
-                          <span className="
-                            ml-1
-                            text-destructive
-                          ">
+                          <span
+                            className="
+                              ml-1
+                              text-destructive
+                            "
+                          >
                             *
                           </span>
 
@@ -1899,10 +1978,12 @@ export default function EditOrganizationPage() {
 
                           Postal Code
 
-                          <span className="
-                            ml-1
-                            text-destructive
-                          ">
+                          <span
+                            className="
+                              ml-1
+                              text-destructive
+                            "
+                          >
                             *
                           </span>
 
@@ -1966,10 +2047,12 @@ export default function EditOrganizationPage() {
 
                           Address Line 1
 
-                          <span className="
-                            ml-1
-                            text-destructive
-                          ">
+                          <span
+                            className="
+                              ml-1
+                              text-destructive
+                            "
+                          >
                             *
                           </span>
 
@@ -2040,12 +2123,14 @@ export default function EditOrganizationPage() {
 
                           Address Line 2
 
-                          <span className="
-                            ml-2
-                            text-xs
-                            font-normal
-                            text-muted-foreground
-                          ">
+                          <span
+                            className="
+                              ml-2
+                              text-xs
+                              font-normal
+                              text-muted-foreground
+                            "
+                          >
 
                             Optional
 
@@ -2118,11 +2203,13 @@ export default function EditOrganizationPage() {
                       htmlFor="website"
                     >
 
-                      <span className="
-                        flex
-                        items-center
-                        gap-2
-                      ">
+                      <span
+                        className="
+                          flex
+                          items-center
+                          gap-2
+                        "
+                      >
 
                         <Globe
                           className="
@@ -2133,11 +2220,13 @@ export default function EditOrganizationPage() {
 
                         Website
 
-                        <span className="
-                          text-xs
-                          font-normal
-                          text-muted-foreground
-                        ">
+                        <span
+                          className="
+                            text-xs
+                            font-normal
+                            text-muted-foreground
+                          "
+                        >
 
                           Optional
 
@@ -2192,22 +2281,26 @@ export default function EditOrganizationPage() {
 
             <CardHeader>
 
-              <div className="
-                flex
-                items-center
-                gap-3
-              ">
-
-                <div className="
+              <div
+                className="
                   flex
-                  h-10
-                  w-10
-                  shrink-0
                   items-center
-                  justify-center
-                  rounded-lg
-                  bg-primary/10
-                ">
+                  gap-3
+                "
+              >
+
+                <div
+                  className="
+                    flex
+                    h-10
+                    w-10
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-lg
+                    bg-primary/10
+                  "
+                >
 
                   <UserRound
                     className="
@@ -2247,13 +2340,17 @@ export default function EditOrganizationPage() {
               className="space-y-6"
             >
 
-              {/* FIRST + LAST */}
+              {/* ============================================
+                  FIRST + LAST
+              ============================================ */}
 
-              <div className="
-                grid
-                gap-5
-                md:grid-cols-2
-              ">
+              <div
+                className="
+                  grid
+                  gap-5
+                  md:grid-cols-2
+                "
+              >
 
                 <Controller
                   name="contact.firstName"
@@ -2277,10 +2374,12 @@ export default function EditOrganizationPage() {
 
                         First Name
 
-                        <span className="
-                          ml-1
-                          text-destructive
-                        ">
+                        <span
+                          className="
+                            ml-1
+                            text-destructive
+                          "
+                        >
                           *
                         </span>
 
@@ -2339,13 +2438,17 @@ export default function EditOrganizationPage() {
 
                         Last Name
 
-                        <span className="
-                          ml-2
-                          text-xs
-                          font-normal
-                          text-muted-foreground
-                        ">
+                        <span
+                          className="
+                            ml-2
+                            text-xs
+                            font-normal
+                            text-muted-foreground
+                          "
+                        >
+
                           Optional
+
                         </span>
 
                       </FieldLabel>
@@ -2407,10 +2510,12 @@ export default function EditOrganizationPage() {
 
                       Designation
 
-                      <span className="
-                        ml-1
-                        text-destructive
-                      ">
+                      <span
+                        className="
+                          ml-1
+                          text-destructive
+                        "
+                      >
                         *
                       </span>
 
@@ -2470,11 +2575,13 @@ export default function EditOrganizationPage() {
                       htmlFor="contact-email"
                     >
 
-                      <span className="
-                        flex
-                        items-center
-                        gap-2
-                      ">
+                      <span
+                        className="
+                          flex
+                          items-center
+                          gap-2
+                        "
+                      >
 
                         <Mail
                           className="
@@ -2485,9 +2592,11 @@ export default function EditOrganizationPage() {
 
                         Email Address
 
-                        <span className="
-                          text-destructive
-                        ">
+                        <span
+                          className="
+                            text-destructive
+                          "
+                        >
                           *
                         </span>
 
@@ -2535,11 +2644,13 @@ export default function EditOrganizationPage() {
 
                   <FieldLabel>
 
-                    <span className="
-                      flex
-                      items-center
-                      gap-2
-                    ">
+                    <span
+                      className="
+                        flex
+                        items-center
+                        gap-2
+                      "
+                    >
 
                       <Phone
                         className="
@@ -2550,9 +2661,11 @@ export default function EditOrganizationPage() {
 
                       Phone Number
 
-                      <span className="
-                        text-destructive
-                      ">
+                      <span
+                        className="
+                          text-destructive
+                        "
+                      >
                         *
                       </span>
 
@@ -2563,11 +2676,13 @@ export default function EditOrganizationPage() {
                 </div>
 
 
-                <div className="
-                  grid
-                  grid-cols-[150px_1fr]
-                  gap-3
-                ">
+                <div
+                  className="
+                    grid
+                    grid-cols-[150px_1fr]
+                    gap-3
+                  "
+                >
 
                   {/* COUNTRY CODE */}
 
@@ -2701,6 +2816,7 @@ export default function EditOrganizationPage() {
                                   ""
                                 );
 
+
                             field.onChange(
                               value
                             );
@@ -2731,29 +2847,35 @@ export default function EditOrganizationPage() {
 
               {/* PRIMARY INFO */}
 
-              <div className="
-                rounded-lg
-                border
-                bg-muted/30
-                px-4
-                py-3
-              ">
+              <div
+                className="
+                  rounded-lg
+                  border
+                  bg-muted/30
+                  px-4
+                  py-3
+                "
+              >
 
-                <p className="
-                  text-sm
-                  font-medium
-                ">
+                <p
+                  className="
+                    text-sm
+                    font-medium
+                  "
+                >
 
                   Primary Contact
 
                 </p>
 
 
-                <p className="
-                  mt-1
-                  text-xs
-                  text-muted-foreground
-                ">
+                <p
+                  className="
+                    mt-1
+                    text-xs
+                    text-muted-foreground
+                  "
+                >
 
                   This person is stored as the
                   organization's current primary
@@ -2772,27 +2894,31 @@ export default function EditOrganizationPage() {
               STICKY ACTION BAR
           ================================================= */}
 
-          <div className="
-            sticky
-            bottom-0
-            z-40
-            -mx-6
-            mt-6
-            border-t
-            bg-background/95
-            px-6
-            py-4
-            backdrop-blur
-            supports-[backdrop-filter]:bg-background/80
-          ">
+          <div
+            className="
+              sticky
+              bottom-0
+              z-40
+              -mx-6
+              mt-6
+              border-t
+              bg-background/95
+              px-6
+              py-4
+              backdrop-blur
+              supports-[backdrop-filter]:bg-background/80
+            "
+          >
 
-            <div className="
-              flex
-              flex-col-reverse
-              gap-3
-              sm:flex-row
-              sm:justify-end
-            ">
+            <div
+              className="
+                flex
+                flex-col-reverse
+                gap-3
+                sm:flex-row
+                sm:justify-end
+              "
+            >
 
               <Button
                 type="button"
@@ -2823,16 +2949,18 @@ export default function EditOrganizationPage() {
 
                   <>
 
-                    <span className="
-                      mr-2
-                      h-4
-                      w-4
-                      animate-spin
-                      rounded-full
-                      border-2
-                      border-current
-                      border-t-transparent
-                    " />
+                    <span
+                      className="
+                        mr-2
+                        h-4
+                        w-4
+                        animate-spin
+                        rounded-full
+                        border-2
+                        border-current
+                        border-t-transparent
+                      "
+                    />
 
                     Updating...
 
@@ -2841,14 +2969,6 @@ export default function EditOrganizationPage() {
                 ) : (
 
                   <>
-
-                    <Save
-                      className="
-                        mr-2
-                        h-4
-                        w-4
-                      "
-                    />
 
                     Update Organization
 

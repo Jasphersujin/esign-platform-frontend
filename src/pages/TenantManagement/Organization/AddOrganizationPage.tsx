@@ -2132,58 +2132,56 @@ export default function AddOrganizationPage() {
 
           </div> */}
           {/* ================================================= */}
-{/* STICKY ACTION BAR */}
-{/* ================================================= */}
+          {/* STICKY ACTION BAR */}
+          {/* ================================================= */}
 
-<div
-  className="
-    sticky
-    bottom-0
-    z-40
-    -mx-6
-    mt-6
-    border-t
-    bg-background/95
-    px-6
-    py-4
-    backdrop-blur
-    supports-[backdrop-filter]:bg-background/80
-  "
->
-  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <div
+            className="
+              sticky
+              bottom-0
+              z-40
+              -mx-6
+              mt-6
+              border-t
+              bg-background/95
+              px-6
+              py-4
+              backdrop-blur
+              supports-[backdrop-filter]:bg-background/80
+            "
+          >
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 
-    <Button
-      type="button"
-      variant="outline"
-      disabled={isSubmitting}
-      onClick={() =>
-        navigate("/organizations")
-      }
-    >
-      Cancel
-    </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                onClick={() =>
+                  navigate("/organizations")
+                }
+              >
+                Cancel
+              </Button>
 
-    <Button
-      type="submit"
-      disabled={isSubmitting}
-    >
-      {isSubmitting ? (
-        <>
-          <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
 
-          Creating...
-        </>
-      ) : (
-        <>
-          <Save className="mr-2 h-4 w-4" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    Create Organization
+                  </>
+                )}
+              </Button>
 
-          Create Organization
-        </>
-      )}
-    </Button>
-
-  </div>
-</div>
+            </div>
+          </div>
 
         </form>
 

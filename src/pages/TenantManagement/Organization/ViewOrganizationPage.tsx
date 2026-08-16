@@ -24,19 +24,35 @@ import {
 
 import api from "@/api/api";
 
+
 /* ============================================================
    TYPES
 ============================================================ */
 
 interface OrganizationContact {
+  id?: string;
+
   firstName?: string;
+
   lastName?: string | null;
+
   designation?: string;
+
   email?: string;
+
   countryCode?: string;
+
   phoneNumber?: string;
+
   primary?: boolean;
+
+  active?: boolean;
+
+  effectiveFrom?: string;
+
+  effectiveTo?: string | null;
 }
+
 
 interface Organization {
   id: string;
@@ -61,8 +77,14 @@ interface Organization {
 
   businessType?: string;
 
-  contact?: OrganizationContact | null;
+  /*
+   * IMPORTANT:
+   *
+   * Backend returns contacts as an ARRAY.
+   */
+  contacts?: OrganizationContact[];
 }
+
 
 /* ============================================================
    BUSINESS TYPE LABEL
@@ -81,128 +103,294 @@ const BUSINESS_TYPE_LABELS: Record<
   OTHER: "Other",
 };
 
+
 /* ============================================================
    COMPONENT
 ============================================================ */
 
 export default function ViewOrganizationPage() {
-  const navigate = useNavigate();
 
-  const { id } = useParams<{
+  const navigate =
+    useNavigate();
+
+
+  const {
+    id,
+  } = useParams<{
     id: string;
   }>();
+
 
   /* ==========================================================
      STATE
   ========================================================== */
 
-  const [organization, setOrganization] =
-    useState<Organization | null>(null);
+  const [
+    organization,
+    setOrganization,
+  ] = useState<
+    Organization | null
+  >(null);
 
-  const [isLoading, setIsLoading] =
-    useState(true);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
+
+
+  const [
+    error,
+    setError,
+  ] = useState<
+    string | null
+  >(null);
+
 
   /* ==========================================================
      LOAD ORGANIZATION
   ========================================================== */
 
   useEffect(() => {
+
     if (!id) {
-      setError("Organization ID is missing.");
+
+      setError(
+        "Organization ID is missing."
+      );
+
       setIsLoading(false);
+
       return;
+
     }
 
-    const loadOrganization = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
 
-        const response = await api.get(
-          `/api/v1/organizations/${id}`
-        );
+    const loadOrganization =
+      async () => {
 
-        /*
-         * Supports:
-         *
-         * {
-         *   data: {...}
-         * }
-         *
-         * OR
-         *
-         * {...}
-         */
+        try {
 
-        const data =
-          response.data?.data ??
-          response.data;
+          setIsLoading(true);
 
-        setOrganization(data);
-      } catch (error: any) {
-        console.error(
-          "Failed to load organization:",
-          error
-        );
+          setError(null);
 
-        setError(
-          error?.response?.data?.message ??
-            error?.response?.data?.error ??
+
+          const response =
+            await api.get(
+              `/api/v1/organizations/${id}`
+            );
+
+
+          console.log(
+            "VIEW ORGANIZATION RESPONSE:",
+            response.data
+          );
+
+
+          /*
+           * Supports:
+           *
+           * {
+           *   data: {...}
+           * }
+           *
+           * OR
+           *
+           * {...}
+           */
+
+          const data:
+            Organization =
+            response.data?.data ??
+            response.data;
+
+
+          console.log(
+            "VIEW ORGANIZATION DATA:",
+            data
+          );
+
+
+          /*
+           * IMPORTANT:
+           *
+           * Backend returns:
+           *
+           * contacts: [...]
+           *
+           * so make sure the page stores the
+           * complete organization object.
+           */
+
+          setOrganization(data);
+
+        } catch (
+          error: any
+        ) {
+
+          console.error(
+            "Failed to load organization:",
+            error
+          );
+
+
+          setError(
+
+            error
+              ?.response
+              ?.data
+              ?.message ??
+
+            error
+              ?.response
+              ?.data
+              ?.error ??
+
             "Failed to load organization."
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
+
+          );
+
+        } finally {
+
+          setIsLoading(false);
+
+        }
+
+      };
+
 
     loadOrganization();
+
   }, [id]);
+
 
   /* ============================================================
      LOGO
   ============================================================ */
 
   const getLogoUrl = (
-    logo: string | null | undefined
+    logo:
+      string |
+      null |
+      undefined
   ) => {
+
     if (!logo) {
       return null;
     }
 
+
     /*
-     * Already a complete data URL
+     * Already a complete data URL.
      */
-    if (logo.startsWith("data:")) {
+
+    if (
+      logo.startsWith(
+        "data:"
+      )
+    ) {
+
       return logo;
+
     }
+
 
     /*
      * Backend returns raw Base64.
      */
+
     return `data:image/png;base64,${logo}`;
+
   };
+
+
+  /* ============================================================
+     PRIMARY CONTACT
+  ============================================================ */
+
+  const getPrimaryContact = (
+    contacts?:
+      OrganizationContact[]
+  ): OrganizationContact | null => {
+
+    if (
+      !contacts ||
+      contacts.length === 0
+    ) {
+
+      return null;
+
+    }
+
+
+    /*
+     * First preference:
+     * contact where primary === true
+     */
+
+    const primaryContact =
+      contacts.find(
+        (contact) =>
+          contact.primary === true
+      );
+
+
+    if (primaryContact) {
+
+      return primaryContact;
+
+    }
+
+
+    /*
+     * Fallback:
+     * first contact
+     */
+
+    return contacts[0];
+
+  };
+
 
   /* ============================================================
      FULL CONTACT NAME
   ============================================================ */
 
   const getContactName = (
-    contact?: OrganizationContact | null
+    contact?:
+      OrganizationContact |
+      null
   ) => {
+
     if (!contact) {
+
       return "Not available";
+
     }
 
-    return [
+
+    const fullName = [
+
       contact.firstName,
+
       contact.lastName,
+
     ]
-      .filter(Boolean)
-      .join(" ");
+      .filter(
+        Boolean
+      )
+      .join(" ")
+      .trim();
+
+
+    return (
+      fullName ||
+      "Not available"
+    );
+
   };
+
 
   /* ============================================================
      BUSINESS TYPE
@@ -211,47 +399,74 @@ export default function ViewOrganizationPage() {
   const getBusinessTypeLabel = (
     businessType?: string
   ) => {
+
     if (!businessType) {
+
       return "Not available";
+
     }
+
 
     return (
       BUSINESS_TYPE_LABELS[
         businessType
-      ] ?? businessType
+      ] ??
+      businessType
     );
+
   };
+
 
   /* ============================================================
      ADDRESS
   ============================================================ */
 
   const getAddress = () => {
+
     if (!organization) {
+
       return "";
+
     }
 
+
     return [
+
       organization.addressLine1,
+
       organization.addressLine2,
+
       organization.city,
+
       organization.state,
+
       organization.country,
+
       organization.postalCode,
+
     ]
-      .filter(Boolean)
+      .filter(
+        Boolean
+      )
       .join(", ");
+
   };
+
 
   /* ============================================================
      LOADING
   ============================================================ */
 
   if (isLoading) {
+
     return (
+
       <div className="min-h-screen bg-muted/30">
+
         <div className="flex min-h-[60vh] items-center justify-center">
+
           <div className="flex flex-col items-center gap-3">
+
             <span
               className="
                 h-7
@@ -265,34 +480,53 @@ export default function ViewOrganizationPage() {
             />
 
             <p className="text-sm text-muted-foreground">
+
               Loading organization...
+
             </p>
+
           </div>
+
         </div>
+
       </div>
+
     );
+
   }
+
 
   /* ============================================================
      ERROR
   ============================================================ */
 
   if (error) {
+
     return (
+
       <div className="min-h-screen bg-muted/30">
+
         <div className="w-full max-w-6xl p-6">
+
           <Button
             type="button"
             variant="ghost"
             className="-ml-2 mb-4"
             onClick={() =>
-              navigate("/organizations")
+              navigate(
+                "/organizations"
+              )
             }
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
+
+            <ArrowLeft
+              className="mr-2 h-4 w-4"
+            />
 
             Back to Organizations
+
           </Button>
+
 
           <div
             className="
@@ -306,65 +540,131 @@ export default function ViewOrganizationPage() {
               text-destructive
             "
           >
+
             {error}
+
           </div>
+
         </div>
+
       </div>
+
     );
+
   }
+
 
   /* ============================================================
      NOT FOUND
   ============================================================ */
 
   if (!organization) {
+
     return (
+
       <div className="min-h-screen bg-muted/30">
+
         <div className="w-full max-w-6xl p-6">
+
           <Button
             type="button"
             variant="ghost"
             className="-ml-2 mb-4"
             onClick={() =>
-              navigate("/organizations")
+              navigate(
+                "/organizations"
+              )
             }
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
+
+            <ArrowLeft
+              className="mr-2 h-4 w-4"
+            />
 
             Back to Organizations
+
           </Button>
 
-          <div className="rounded-lg border bg-background p-6">
-            <p className="text-sm text-muted-foreground">
+
+          <div
+            className="
+              rounded-lg
+              border
+              bg-background
+              p-6
+            "
+          >
+
+            <p
+              className="
+                text-sm
+                text-muted-foreground
+              "
+            >
+
               Organization not found.
+
             </p>
+
           </div>
+
         </div>
+
       </div>
+
     );
+
   }
+
 
   /* ============================================================
      DATA
   ============================================================ */
 
+  /*
+   * IMPORTANT FIX
+   *
+   * Backend:
+   *
+   * contacts: [...]
+   *
+   * Frontend:
+   *
+   * Find primary contact.
+   */
+
   const contact =
-    organization.contact;
+    getPrimaryContact(
+      organization.contacts
+    );
+
+
+  console.log(
+    "VIEW PRIMARY CONTACT:",
+    contact
+  );
+
 
   const logoUrl =
     getLogoUrl(
       organization.orgLogo
     );
 
+
   const contactName =
-    getContactName(contact);
+    getContactName(
+      contact
+    );
+
 
   /* ============================================================
      RENDER
   ============================================================ */
 
   return (
+
     <div className="min-h-screen bg-muted/30">
+
       <div className="w-full max-w-6xl p-6">
 
         {/* ======================================================
@@ -372,30 +672,68 @@ export default function ViewOrganizationPage() {
         ====================================================== */}
 
         <div className="mb-6">
+
           <Button
             type="button"
             variant="ghost"
             className="-ml-2 mb-3"
             onClick={() =>
-              navigate("/organizations")
+              navigate(
+                "/organizations"
+              )
             }
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
+
+            <ArrowLeft
+              className="mr-2 h-4 w-4"
+            />
 
             Back to Organizations
+
           </Button>
 
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+
+          <div
+            className="
+              flex
+              flex-col
+              gap-4
+              sm:flex-row
+              sm:items-start
+              sm:justify-between
+            "
+          >
+
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
+
+              <h1
+                className="
+                  text-2xl
+                  font-semibold
+                  tracking-tight
+                "
+              >
+
                 Organization Details
+
               </h1>
 
-              <p className="mt-1 text-sm text-muted-foreground">
+
+              <p
+                className="
+                  mt-1
+                  text-sm
+                  text-muted-foreground
+                "
+              >
+
                 View organization information and
                 current primary contact.
+
               </p>
+
             </div>
+
 
             <Button
               type="button"
@@ -405,25 +743,48 @@ export default function ViewOrganizationPage() {
                 )
               }
             >
-              <Pencil className="mr-2 h-4 w-4" />
+
+              <Pencil
+                className="
+                  mr-2
+                  h-4
+                  w-4
+                "
+              />
 
               Edit Organization
+
             </Button>
+
           </div>
+
         </div>
+
 
         {/* ======================================================
             ORGANIZATION OVERVIEW
         ====================================================== */}
 
         <Card className="mb-6">
+
           <CardContent className="p-6">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+
+            <div
+              className="
+                flex
+                flex-col
+                gap-6
+                sm:flex-row
+                sm:items-center
+              "
+            >
 
               {/* LOGO */}
 
               <div className="shrink-0">
+
                 {logoUrl ? (
+
                   <img
                     src={logoUrl}
                     alt={`${organization.orgName ?? "Organization"} logo`}
@@ -436,7 +797,9 @@ export default function ViewOrganizationPage() {
                       object-cover
                     "
                   />
+
                 ) : (
+
                   <div
                     className="
                       flex
@@ -449,6 +812,7 @@ export default function ViewOrganizationPage() {
                       bg-muted/50
                     "
                   >
+
                     <Building2
                       className="
                         h-10
@@ -456,20 +820,47 @@ export default function ViewOrganizationPage() {
                         text-muted-foreground
                       "
                     />
+
                   </div>
+
                 )}
+
               </div>
+
 
               {/* BASIC INFORMATION */}
 
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-xl font-semibold">
+              <div
+                className="
+                  min-w-0
+                  flex-1
+                "
+              >
+
+                <div
+                  className="
+                    flex
+                    flex-wrap
+                    items-center
+                    gap-3
+                  "
+                >
+
+                  <h2
+                    className="
+                      text-xl
+                      font-semibold
+                    "
+                  >
+
                     {organization.orgName ||
                       "Unnamed Organization"}
+
                   </h2>
 
+
                   {organization.businessType && (
+
                     <span
                       className="
                         rounded-full
@@ -481,32 +872,70 @@ export default function ViewOrganizationPage() {
                         font-medium
                       "
                     >
+
                       {getBusinessTypeLabel(
                         organization.businessType
                       )}
+
                     </span>
+
                   )}
+
                 </div>
 
-                <p className="mt-2 text-sm text-muted-foreground">
+
+                <p
+                  className="
+                    mt-2
+                    text-sm
+                    text-muted-foreground
+                  "
+                >
+
                   Organization ID
+
                 </p>
 
-                <p className="mt-0.5 break-all font-mono text-xs text-muted-foreground">
+
+                <p
+                  className="
+                    mt-0.5
+                    break-all
+                    font-mono
+                    text-xs
+                    text-muted-foreground
+                  "
+                >
+
                   {organization.id}
+
                 </p>
+
               </div>
+
             </div>
+
           </CardContent>
+
         </Card>
+
 
         {/* ======================================================
             ORGANIZATION INFORMATION
         ====================================================== */}
 
         <Card className="mb-6">
+
           <CardHeader>
-            <div className="flex items-center gap-3">
+
+            <div
+              className="
+                flex
+                items-center
+                gap-3
+              "
+            >
+
               <div
                 className="
                   flex
@@ -519,6 +948,7 @@ export default function ViewOrganizationPage() {
                   bg-primary/10
                 "
               >
+
                 <Building2
                   className="
                     h-5
@@ -526,25 +956,40 @@ export default function ViewOrganizationPage() {
                     text-primary
                   "
                 />
+
               </div>
 
+
               <div>
+
                 <CardTitle>
                   Organization Information
                 </CardTitle>
 
+
                 <CardDescription>
+
                   Permanent business information
                   registered on the platform.
+
                 </CardDescription>
+
               </div>
+
             </div>
+
           </CardHeader>
 
-          <CardContent>
-            <div className="grid gap-6 md:grid-cols-2">
 
-              {/* ORGANIZATION NAME */}
+          <CardContent>
+
+            <div
+              className="
+                grid
+                gap-6
+                md:grid-cols-2
+              "
+            >
 
               <InfoItem
                 label="Organization Name"
@@ -553,25 +998,49 @@ export default function ViewOrganizationPage() {
                 }
               />
 
-              {/* BUSINESS TYPE */}
 
               <InfoItem
                 label="Business Type"
-                value={getBusinessTypeLabel(
-                  organization.businessType
-                )}
+                value={
+                  getBusinessTypeLabel(
+                    organization.businessType
+                  )
+                }
               />
 
-              {/* WEBSITE */}
 
-              <div className="md:col-span-2">
-                <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                  <Globe className="h-3.5 w-3.5" />
+              <div
+                className="
+                  md:col-span-2
+                "
+              >
+
+                <div
+                  className="
+                    mb-1.5
+                    flex
+                    items-center
+                    gap-2
+                    text-xs
+                    font-medium
+                    text-muted-foreground
+                  "
+                >
+
+                  <Globe
+                    className="
+                      h-3.5
+                      w-3.5
+                    "
+                  />
 
                   Website
+
                 </div>
 
+
                 {organization.website ? (
+
                   <a
                     href={
                       organization.website
@@ -586,25 +1055,51 @@ export default function ViewOrganizationPage() {
                       hover:underline
                     "
                   >
+
                     {organization.website}
+
                   </a>
+
                 ) : (
-                  <p className="text-sm text-muted-foreground">
+
+                  <p
+                    className="
+                      text-sm
+                      text-muted-foreground
+                    "
+                  >
+
                     Not provided
+
                   </p>
+
                 )}
+
               </div>
+
             </div>
+
           </CardContent>
+
         </Card>
+
 
         {/* ======================================================
             BUSINESS ADDRESS
         ====================================================== */}
 
         <Card className="mb-6">
+
           <CardHeader>
-            <div className="flex items-center gap-3">
+
+            <div
+              className="
+                flex
+                items-center
+                gap-3
+              "
+            >
+
               <div
                 className="
                   flex
@@ -617,6 +1112,7 @@ export default function ViewOrganizationPage() {
                   bg-primary/10
                 "
               >
+
                 <MapPin
                   className="
                     h-5
@@ -624,22 +1120,39 @@ export default function ViewOrganizationPage() {
                     text-primary
                   "
                 />
+
               </div>
 
+
               <div>
+
                 <CardTitle>
                   Business Address
                 </CardTitle>
 
+
                 <CardDescription>
+
                   Registered organization address.
+
                 </CardDescription>
+
               </div>
+
             </div>
+
           </CardHeader>
 
+
           <CardContent>
-            <div className="grid gap-6 md:grid-cols-2">
+
+            <div
+              className="
+                grid
+                gap-6
+                md:grid-cols-2
+              "
+            >
 
               <InfoItem
                 label="Country"
@@ -648,12 +1161,14 @@ export default function ViewOrganizationPage() {
                 }
               />
 
+
               <InfoItem
                 label="State"
                 value={
                   organization.state
                 }
               />
+
 
               <InfoItem
                 label="City"
@@ -662,6 +1177,7 @@ export default function ViewOrganizationPage() {
                 }
               />
 
+
               <InfoItem
                 label="Postal Code"
                 value={
@@ -669,13 +1185,17 @@ export default function ViewOrganizationPage() {
                 }
               />
 
+
               <InfoItem
                 label="Address Line 1"
                 value={
                   organization.addressLine1
                 }
-                className="md:col-span-2"
+                className="
+                  md:col-span-2
+                "
               />
+
 
               <InfoItem
                 label="Address Line 2"
@@ -683,30 +1203,69 @@ export default function ViewOrganizationPage() {
                   organization.addressLine2
                 }
                 optional
-                className="md:col-span-2"
+                className="
+                  md:col-span-2
+                "
               />
 
-              <div className="md:col-span-2">
-                <div className="mb-1.5 text-xs font-medium text-muted-foreground">
+
+              <div
+                className="
+                  md:col-span-2
+                "
+              >
+
+                <div
+                  className="
+                    mb-1.5
+                    text-xs
+                    font-medium
+                    text-muted-foreground
+                  "
+                >
+
                   Complete Address
+
                 </div>
 
-                <p className="text-sm leading-6">
+
+                <p
+                  className="
+                    text-sm
+                    leading-6
+                  "
+                >
+
                   {getAddress() ||
                     "Address not available"}
+
                 </p>
+
               </div>
+
             </div>
+
           </CardContent>
+
         </Card>
+
 
         {/* ======================================================
             PRIMARY CONTACT
         ====================================================== */}
 
         <Card className="mb-6">
+
           <CardHeader>
-            <div className="flex items-center gap-3">
+
+            <div
+              className="
+                flex
+                items-center
+                gap-3
+              "
+            >
+
               <div
                 className="
                   flex
@@ -719,6 +1278,7 @@ export default function ViewOrganizationPage() {
                   bg-primary/10
                 "
               >
+
                 <UserRound
                   className="
                     h-5
@@ -726,28 +1286,50 @@ export default function ViewOrganizationPage() {
                     text-primary
                   "
                 />
+
               </div>
 
+
               <div>
+
                 <CardTitle>
                   Primary Contact Person
                 </CardTitle>
 
+
                 <CardDescription>
+
                   Current contact person representing
                   the organization.
+
                 </CardDescription>
+
               </div>
+
             </div>
+
           </CardHeader>
 
+
           <CardContent>
+
             {contact ? (
-              <div className="space-y-6">
+
+              <div
+                className="
+                  space-y-6
+                "
+              >
 
                 {/* NAME + DESIGNATION */}
 
-                <div className="grid gap-6 md:grid-cols-2">
+                <div
+                  className="
+                    grid
+                    gap-6
+                    md:grid-cols-2
+                  "
+                >
 
                   <InfoItem
                     label="Full Name"
@@ -755,6 +1337,7 @@ export default function ViewOrganizationPage() {
                       contactName
                     }
                   />
+
 
                   <InfoItem
                     label="Designation"
@@ -765,18 +1348,74 @@ export default function ViewOrganizationPage() {
 
                 </div>
 
-                {/* CONTACT DETAILS */}
 
-                <div className="grid gap-6 md:grid-cols-2">
+                {/* FIRST NAME + LAST NAME */}
+
+                <div
+                  className="
+                    grid
+                    gap-6
+                    md:grid-cols-2
+                  "
+                >
+
+                  <InfoItem
+                    label="First Name"
+                    value={
+                      contact.firstName
+                    }
+                  />
+
+
+                  <InfoItem
+                    label="Last Name"
+                    value={
+                      contact.lastName
+                    }
+                    optional
+                  />
+
+                </div>
+
+
+                {/* EMAIL + PHONE */}
+
+                <div
+                  className="
+                    grid
+                    gap-6
+                    md:grid-cols-2
+                  "
+                >
 
                   <div>
-                    <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <Mail className="h-3.5 w-3.5" />
+
+                    <div
+                      className="
+                        mb-1.5
+                        flex
+                        items-center
+                        gap-2
+                        text-xs
+                        font-medium
+                        text-muted-foreground
+                      "
+                    >
+
+                      <Mail
+                        className="
+                          h-3.5
+                          w-3.5
+                        "
+                      />
 
                       Email Address
+
                     </div>
 
+
                     {contact.email ? (
+
                       <a
                         href={`mailto:${contact.email}`}
                         className="
@@ -787,24 +1426,57 @@ export default function ViewOrganizationPage() {
                           hover:underline
                         "
                       >
+
                         {contact.email}
+
                       </a>
+
                     ) : (
-                      <p className="text-sm text-muted-foreground">
+
+                      <p
+                        className="
+                          text-sm
+                          text-muted-foreground
+                        "
+                      >
+
                         Not provided
+
                       </p>
+
                     )}
+
                   </div>
 
 
                   <div>
-                    <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <Phone className="h-3.5 w-3.5" />
+
+                    <div
+                      className="
+                        mb-1.5
+                        flex
+                        items-center
+                        gap-2
+                        text-xs
+                        font-medium
+                        text-muted-foreground
+                      "
+                    >
+
+                      <Phone
+                        className="
+                          h-3.5
+                          w-3.5
+                        "
+                      />
 
                       Phone Number
+
                     </div>
 
+
                     {contact.phoneNumber ? (
+
                       <a
                         href={`tel:${contact.countryCode ?? ""}${contact.phoneNumber}`}
                         className="
@@ -814,17 +1486,32 @@ export default function ViewOrganizationPage() {
                           hover:underline
                         "
                       >
+
                         {contact.countryCode}{" "}
+
                         {contact.phoneNumber}
+
                       </a>
+
                     ) : (
-                      <p className="text-sm text-muted-foreground">
+
+                      <p
+                        className="
+                          text-sm
+                          text-muted-foreground
+                        "
+                      >
+
                         Not provided
+
                       </p>
+
                     )}
+
                   </div>
 
                 </div>
+
 
                 {/* PRIMARY STATUS */}
 
@@ -837,85 +1524,100 @@ export default function ViewOrganizationPage() {
                     py-3
                   "
                 >
-                  <p className="text-sm font-medium">
+
+                  <p
+                    className="
+                      text-sm
+                      font-medium
+                    "
+                  >
+
                     Primary Contact
+
                   </p>
 
-                  <p className="mt-1 text-xs text-muted-foreground">
+
+                  <p
+                    className="
+                      mt-1
+                      text-xs
+                      text-muted-foreground
+                    "
+                  >
+
                     This person is currently stored
                     as the organization's primary
                     contact.
+
                   </p>
+
                 </div>
 
               </div>
-            ) : (
-              <div className="rounded-lg border border-dashed p-6 text-center">
-                <UserRound className="mx-auto h-8 w-8 text-muted-foreground" />
 
-                <p className="mt-2 text-sm font-medium">
+            ) : (
+
+              <div
+                className="
+                  rounded-lg
+                  border
+                  border-dashed
+                  p-6
+                  text-center
+                "
+              >
+
+                <UserRound
+                  className="
+                    mx-auto
+                    h-8
+                    w-8
+                    text-muted-foreground
+                  "
+                />
+
+
+                <p
+                  className="
+                    mt-2
+                    text-sm
+                    font-medium
+                  "
+                >
+
                   No contact information
+
                 </p>
 
-                <p className="mt-1 text-xs text-muted-foreground">
+
+                <p
+                  className="
+                    mt-1
+                    text-xs
+                    text-muted-foreground
+                  "
+                >
+
                   No primary contact is currently
                   associated with this organization.
+
                 </p>
+
               </div>
+
             )}
+
           </CardContent>
+
         </Card>
 
-        {/* ======================================================
-            BOTTOM ACTIONS
-        ====================================================== */}
-
-        <div
-          className="
-            sticky
-            bottom-0
-            z-40
-            -mx-6
-            mt-6
-            border-t
-            bg-background/95
-            px-6
-            py-4
-            backdrop-blur
-            supports-[backdrop-filter]:bg-background/80
-          "
-        >
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                navigate("/organizations")
-              }
-            >
-              Back
-            </Button>
-
-            <Button
-              type="button"
-              onClick={() =>
-                navigate(
-                  `/organizations/${organization.id}/edit`
-                )
-              }
-            >
-              <Pencil className="mr-2 h-4 w-4" />
-
-              Edit Organization
-            </Button>
-
-          </div>
-        </div>
 
       </div>
+
     </div>
+
   );
+
 }
 
 
@@ -924,29 +1626,69 @@ export default function ViewOrganizationPage() {
 ============================================================ */
 
 interface InfoItemProps {
+
   label: string;
-  value?: string | null;
+
+  value?:
+    string |
+    null;
+
   optional?: boolean;
+
   className?: string;
+
 }
 
+
 function InfoItem({
+
   label,
+
   value,
+
   optional = false,
+
   className = "",
+
 }: InfoItemProps) {
+
   return (
-    <div className={className}>
-      <div className="mb-1.5 text-xs font-medium text-muted-foreground">
+
+    <div
+      className={
+        className
+      }
+    >
+
+      <div
+        className="
+          mb-1.5
+          text-xs
+          font-medium
+          text-muted-foreground
+        "
+      >
+
         {label}
 
+
         {optional && (
-          <span className="ml-2 font-normal">
+
+          <span
+            className="
+              ml-2
+              font-normal
+            "
+          >
+
             Optional
+
           </span>
+
         )}
+
       </div>
+
 
       <p
         className={
@@ -955,8 +1697,14 @@ function InfoItem({
             : "text-sm text-muted-foreground"
         }
       >
-        {value || "Not provided"}
+
+        {value ||
+          "Not provided"}
+
       </p>
+
     </div>
+
   );
+
 }

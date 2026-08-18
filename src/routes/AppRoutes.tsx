@@ -11,6 +11,10 @@ import DepartmentsPage from "@/pages/TenantManagement/Department/DepartmentsPage
 import AddDepartmentPage from "@/pages/TenantManagement/Department/AddDepartmentPage";
 import EditDepartmentPage from "@/pages/TenantManagement/Department/EditDepartmentPage";
 import ViewDepartmentPage from "@/pages/TenantManagement/Department/ViewDepartmentPage";
+import EmployeesPage from "@/pages/TenantManagement/Employees/EmployeesPage";
+import AddEmployeePage from "@/pages/TenantManagement/Employees/AddEmployeePage";
+import EditEmployeePage from "@/pages/TenantManagement/Employees/EditEmployeePage";
+import ViewEmployeePage from "@/pages/TenantManagement/Employees/ViewEmployeePage";
 
 
 export default function AppRoutes() {
@@ -32,6 +36,11 @@ export default function AppRoutes() {
         <Route path="/departments/:id/edit" element={<EditDepartmentPage/>} />
         <Route path="/departments/:id" element={<ViewDepartmentPage/>} />
 
+        {/* Employees */}
+        <Route path="/employees" element={<EmployeesPage/>} />
+        <Route path="/employees/new" element={<AddEmployeePage/>} />
+        <Route path="/employees/:id/edit" element={<EditEmployeePage/>} />
+        <Route path="/employees/:id" element={<ViewEmployeePage/>} />
         
       </Route>
     </Routes>

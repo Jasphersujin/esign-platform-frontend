@@ -582,7 +582,7 @@ export default function AddEmployeePage() {
 
                 {/* ORGANIZATION */}
 
-                <form.Field>
+                <form>
                   <Field>
                     <FieldLabel>
                       Organization
@@ -650,7 +650,7 @@ export default function AddEmployeePage() {
                       </FieldError>
                     )}
                   </Field>
-                </form.Field>
+                </form>
 
 
                 {/* DEPARTMENT */}

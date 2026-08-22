@@ -965,7 +965,7 @@ export default function EmployeesPage() {
           <Button
             onClick={() =>
               navigate(
-                "/employees/add"
+                "/employees/new"
               )
             }
           >

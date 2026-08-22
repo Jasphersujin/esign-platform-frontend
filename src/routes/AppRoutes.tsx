@@ -15,6 +15,8 @@ import EmployeesPage from "@/pages/TenantManagement/Employees/EmployeesPage";
 import AddEmployeePage from "@/pages/TenantManagement/Employees/AddEmployeePage";
 import EditEmployeePage from "@/pages/TenantManagement/Employees/EditEmployeePage";
 import ViewEmployeePage from "@/pages/TenantManagement/Employees/ViewEmployeePage";
+import SettingsPage from "@/pages/Settings/SettingsPage";
+import AuditTrailPage from "@/pages/AuditTrails/AuditTrailPage";
 
 
 export default function AppRoutes() {
@@ -42,6 +44,13 @@ export default function AppRoutes() {
         <Route path="/employees/:id/edit" element={<EditEmployeePage/>} />
         <Route path="/employees/:id" element={<ViewEmployeePage/>} />
         
+
+        {/* Audit Trail */}
+        <Route path="/audit-logs" element={<AuditTrailPage/>} />
+
+        {/* Settings */}
+
+        <Route path="/settings" element={<SettingsPage/>} />
       </Route>
     </Routes>
   );

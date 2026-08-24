@@ -17,6 +17,10 @@ import EditEmployeePage from "@/pages/TenantManagement/Employees/EditEmployeePag
 import ViewEmployeePage from "@/pages/TenantManagement/Employees/ViewEmployeePage";
 import SettingsPage from "@/pages/Settings/SettingsPage";
 import AuditTrailPage from "@/pages/AuditTrails/AuditTrailPage";
+import RolesPage from "@/pages/AccessControl/Roles/RolesPage";
+import AddRolesPage from "@/pages/AccessControl/Roles/AddRolesPage";
+import ViewRolesPage from "@/pages/AccessControl/Roles/ViewRolesPage";
+import EditRolesPage from "@/pages/AccessControl/Roles/EditRolesPage";
 
 
 export default function AppRoutes() {
@@ -43,8 +47,14 @@ export default function AppRoutes() {
         <Route path="/employees/new" element={<AddEmployeePage/>} />
         <Route path="/employees/:id/edit" element={<EditEmployeePage/>} />
         <Route path="/employees/:id" element={<ViewEmployeePage/>} />
-        
 
+        {/* Roles */}
+
+        <Route path="/roles" element={<RolesPage />}/>
+        <Route path="/roles/add" element={<AddRolesPage />}/>
+        <Route path="/roles/:id" element={<ViewRolesPage />} />
+        <Route path="/roles/:id/edit" element={<EditRolesPage />}/>
+        
         {/* Audit Trail */}
         <Route path="/audit-logs" element={<AuditTrailPage/>} />
 

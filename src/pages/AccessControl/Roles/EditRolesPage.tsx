@@ -1,37 +1,27 @@
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  Controller,
+  useForm,
+} from "react-hook-form";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import {
   ArrowLeft,
-  Globe2,
   Loader2,
-  Save,
 } from "lucide-react";
-import {
-  useNavigate,
-  useParams,
-} from "react-router-dom";
-
-import api from "@/api/api";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-import {
-  Field,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/field";
-
-import { Input } from "@/components/ui/input";
 
 import {
   Select,
@@ -41,58 +31,49 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { Textarea } from "@/components/ui/textarea";
+import {
+  Alert,
+  AlertDescription,
+} from "@/components/ui/alert";
+
+import { Switch } from "@/components/ui/switch";
+import api from "@/api/api";
 
 /* ============================================================
    TYPES
 ============================================================ */
 
-interface Tenant {
+type RoleType = "GLOBAL" | "TENANT";
+
+interface RoleResponse {
   id: string;
-  tenantName?: string;
-  name?: string;
-  active?: boolean;
-  deleted?: boolean;
+  organizationId: string | null;
+  roleName: string;
+  roleCode: string;
+  description: string | null;
+  roleType: RoleType;
+  systemRole: boolean;
+  active: boolean;
+  deleted: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface Organization {
   id: string;
   orgName?: string;
-  name?: string;
-  tenantId?: string;
+  organizationName?: string;
   active?: boolean;
   deleted?: boolean;
 }
 
-interface RoleResponse {
-  id: string;
-  roleName: string;
-  roleCode: string;
-  description?: string | null;
-  scopeType: "GLOBAL" | "TENANT";
-  tenantId?: string | null;
-  tenantName?: string | null;
-  organizationId?: string | null;
-  organizationName?: string | null;
-  active: boolean;
-  deleted: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  version?: number;
-}
-
-interface ApiErrorResponse {
-  message?: string;
-  error?: string;
-}
-
 interface RoleFormValues {
+  organizationId: string;
   roleName: string;
   roleCode: string;
   description: string;
-  scopeType: "GLOBAL" | "TENANT";
-  tenantId: string;
-  organizationId: string;
+  roleType: RoleType;
+  systemRole: boolean;
   active: boolean;
 }
 
@@ -102,74 +83,121 @@ interface RoleFormValues {
 
 const roleSchema = z
   .object({
+    organizationId:
+      z.string(),
+
     roleName: z
       .string()
       .trim()
-      .min(2, "Role name must be at least 2 characters")
-      .max(255, "Role name cannot exceed 255 characters"),
+      .min(
+        2,
+        "Role name must be at least 2 characters."
+      )
+      .max(
+        100,
+        "Role name cannot exceed 100 characters."
+      ),
 
     roleCode: z
       .string()
       .trim()
-      .min(2, "Role code is required")
-      .max(100, "Role code cannot exceed 100 characters")
+      .min(
+        2,
+        "Role code is required."
+      )
+      .max(
+        50,
+        "Role code cannot exceed 50 characters."
+      )
       .regex(
         /^[A-Za-z0-9_-]+$/,
-        "Role code can contain only letters, numbers, _ and -"
+        "Role code can contain only letters, numbers, _ and -."
       ),
 
     description: z
       .string()
-      .max(1000, "Description cannot exceed 1000 characters"),
+      .max(
+        500,
+        "Description cannot exceed 500 characters."
+      ),
 
-    scopeType: z.enum(["GLOBAL", "TENANT"]),
+    roleType: z.enum([
+      "GLOBAL",
+      "TENANT",
+    ]),
 
-    tenantId: z.string(),
-
-    organizationId: z.string(),
+    systemRole: z.boolean(),
 
     active: z.boolean(),
   })
-  .superRefine((values, context) => {
-    if (values.scopeType === "TENANT") {
-      if (!values.tenantId) {
+  .superRefine(
+    (values, context) => {
+      if (
+        values.roleType ===
+          "TENANT" &&
+        !values.organizationId
+      ) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["tenantId"],
-          message: "Tenant is required",
+          code:
+            z.ZodIssueCode.custom,
+          path: [
+            "organizationId",
+          ],
+          message:
+            "Organization is required for Tenant Role.",
         });
       }
 
-      if (!values.organizationId) {
+      if (
+        values.roleType ===
+          "GLOBAL" &&
+        values.organizationId
+      ) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["organizationId"],
-          message: "Organization is required",
+          code:
+            z.ZodIssueCode.custom,
+          path: [
+            "organizationId",
+          ],
+          message:
+            "Global roles cannot belong to an organization.",
         });
       }
     }
-  });
+  );
 
 /* ============================================================
    API
 ============================================================ */
 
-async function fetchTenants(): Promise<Tenant[]> {
-  const response = await api.get("/api/v1/tenants?size=100");
+async function fetchOrganizations(): Promise<
+  Organization[]
+> {
+  const response =
+    await api.get(
+      "/api/v1/organizations?size=100"
+    );
 
-  const data = response.data?.data ?? response.data;
+  const data =
+    response.data?.data ??
+    response.data;
 
-  return data?.content ?? data ?? [];
+  return (
+    data?.content ??
+    data ??
+    []
+  );
 }
 
-async function fetchOrganizations(): Promise<Organization[]> {
-  const response = await api.get(
-    "/api/v1/organizations?size=100"
+function getApiMessage(
+  error: any
+): string {
+  return (
+    error?.response?.data?.message ??
+    error?.response?.data?.error ??
+    error?.message ??
+    "Something went wrong."
   );
-
-  const data = response.data?.data ?? response.data;
-
-  return data?.content ?? data ?? [];
 }
 
 /* ============================================================
@@ -179,36 +207,55 @@ async function fetchOrganizations(): Promise<Organization[]> {
 export default function EditRolesPage() {
   const navigate = useNavigate();
 
-  const { id } = useParams<{ id: string }>();
+  const { id } =
+    useParams<{
+      id: string;
+    }>();
 
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [organizations, setOrganizations] = useState<
-    Organization[]
-  >([]);
+  const [
+    organizations,
+    setOrganizations,
+  ] = useState<Organization[]>(
+    []
+  );
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
 
-  const form = useForm<RoleFormValues>({
-    resolver: zodResolver(roleSchema),
+  const [
+    isSubmitting,
+    setIsSubmitting,
+  ] = useState(false);
 
-    defaultValues: {
-      roleName: "",
-      roleCode: "",
-      description: "",
-      scopeType: "GLOBAL",
-      tenantId: "",
-      organizationId: "",
-      active: true,
-    },
+  const [
+    submitError,
+    setSubmitError,
+  ] = useState("");
 
-    mode: "onBlur",
-    reValidateMode: "onChange",
-  });
+  const form =
+    useForm<RoleFormValues>({
+      resolver:
+        zodResolver(roleSchema),
 
-  const scopeType = form.watch("scopeType");
-  const tenantId = form.watch("tenantId");
+      defaultValues: {
+        organizationId: "",
+        roleName: "",
+        roleCode: "",
+        description: "",
+        roleType: "GLOBAL",
+        systemRole: false,
+        active: true,
+      },
+
+      mode: "onBlur",
+      reValidateMode:
+        "onChange",
+    });
+
+  const roleType =
+    form.watch("roleType");
 
   /* ==========================================================
      LOAD
@@ -216,94 +263,79 @@ export default function EditRolesPage() {
 
   useEffect(() => {
     if (!id) {
-      setSubmitError("Role ID is missing.");
+      setSubmitError(
+        "Role ID is missing."
+      );
+
       setIsLoading(false);
+
       return;
     }
 
-    const loadRole = async (): Promise<void> => {
-      try {
-        setIsLoading(true);
-        setSubmitError("");
+    const load =
+      async (): Promise<void> => {
+        try {
+          setIsLoading(true);
+          setSubmitError("");
 
-        const [
-          roleResponse,
-          tenantData,
-          organizationData,
-        ] = await Promise.all([
-          api.get<RoleResponse>(
-            `/api/v1/roles/${id}`
-          ),
-          fetchTenants(),
-          fetchOrganizations(),
-        ]);
+          const [
+            roleResponse,
+            organizationData,
+          ] = await Promise.all([
+            api.get<RoleResponse>(
+              `/api/v1/roles/${id}`
+            ),
+            fetchOrganizations(),
+          ]);
 
-        const role = roleResponse.data;
+          const role =
+            roleResponse.data;
 
-        setTenants(
-          tenantData.filter(
-            (tenant) =>
-              tenant.deleted !== true &&
-              tenant.active !== false
-          )
-        );
+          setOrganizations(
+            organizationData.filter(
+              (organization) =>
+                organization.deleted !==
+                  true &&
+                organization.active !==
+                  false
+            )
+          );
 
-        setOrganizations(
-          organizationData.filter(
-            (organization) =>
-              organization.deleted !== true &&
-              organization.active !== false
-          )
-        );
+          form.reset({
+            organizationId:
+              role.organizationId ??
+              "",
 
-        form.reset({
-          roleName: role.roleName,
-          roleCode: role.roleCode,
-          description: role.description ?? "",
-          scopeType: role.scopeType ?? "GLOBAL",
-          tenantId: role.tenantId ?? "",
-          organizationId:
-            role.organizationId ?? "",
-          active: role.active,
-        });
-      } catch (error) {
-        const apiError = error as {
-          response?: {
-            data?: ApiErrorResponse;
-          };
-          message?: string;
-        };
+            roleName:
+              role.roleName,
 
-        setSubmitError(
-          apiError.response?.data?.message ??
-            apiError.response?.data?.error ??
-            apiError.message ??
-            "Failed to load role."
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
+            roleCode:
+              role.roleCode,
 
-    void loadRole();
+            description:
+              role.description ??
+              "",
+
+            roleType:
+              role.roleType,
+
+            systemRole:
+              role.systemRole,
+
+            active:
+              role.active,
+          });
+        } catch (error) {
+          setSubmitError(
+            getApiMessage(error)
+          );
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+    void load();
   }, [id, form]);
-
-  /* ==========================================================
-     GLOBAL SCOPE
-  ========================================================== */
-
-  useEffect(() => {
-    if (scopeType === "GLOBAL") {
-      form.setValue("tenantId", "");
-      form.setValue("organizationId", "");
-    }
-  }, [scopeType, form]);
-
-  useEffect(() => {
-    if (scopeType === "TENANT") {
-      form.setValue("organizationId", "");
-    }
-  }, [tenantId, scopeType, form]);
 
   /* ==========================================================
      SUBMIT
@@ -311,7 +343,7 @@ export default function EditRolesPage() {
 
   const onSubmit = async (
     values: RoleFormValues
-  ): Promise<void> => {
+  ) => {
     if (!id) {
       return;
     }
@@ -321,28 +353,25 @@ export default function EditRolesPage() {
       setSubmitError("");
 
       const payload = {
-        roleName: values.roleName.trim(),
-
-        roleCode: values.roleCode
-          .trim()
-          .toUpperCase(),
+        /*
+         * Your current backend UpdateRoleRequestDTO
+         * does not contain organizationId or systemRole.
+         *
+         * Therefore PUT must only send fields that the
+         * current backend DTO actually accepts.
+         */
+        roleName:
+          values.roleName.trim(),
 
         description:
-          values.description.trim() || null,
+          values.description.trim() ||
+          null,
 
-        scopeType: values.scopeType,
+        roleType:
+          values.roleType,
 
-        tenantId:
-          values.scopeType === "TENANT"
-            ? values.tenantId
-            : null,
-
-        organizationId:
-          values.scopeType === "TENANT"
-            ? values.organizationId
-            : null,
-
-        active: values.active,
+        active:
+          values.active,
       };
 
       await api.put(
@@ -350,408 +379,382 @@ export default function EditRolesPage() {
         payload
       );
 
-      navigate(`/roles/${id}`);
+      navigate(
+        `/roles/${id}`
+      );
     } catch (error) {
-      const apiError = error as {
-        response?: {
-          data?: ApiErrorResponse;
-        };
-        message?: string;
-      };
-
       setSubmitError(
-        apiError.response?.data?.message ??
-          apiError.response?.data?.error ??
-          apiError.message ??
-          "Failed to update role."
+        getApiMessage(error)
       );
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  /* ==========================================================
+     LOADING
+  ========================================================== */
+
   if (isLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-7 w-7 animate-spin text-primary" />
-
-          <p className="text-sm text-muted-foreground">
+      <div className="w-full p-6">
+        <Card>
+          <CardContent className="flex items-center justify-center p-10">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             Loading role...
-          </p>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  const filteredOrganizations =
-    tenantId
-      ? organizations.filter(
-          (organization) =>
-            !organization.tenantId ||
-            organization.tenantId === tenantId
-        )
-      : [];
+  /* ==========================================================
+     PAGE
+  ========================================================== */
 
   return (
-    <div className="w-full min-w-0 bg-muted/20">
-      <div className="w-full max-w-5xl p-4 sm:p-6">
+    <div className="w-full min-w-0 bg-muted/20 p-4 sm:p-6">
+      <div className="mx-auto w-full max-w-3xl">
 
-        {/* HEADER */}
-
-        <div className="mb-6">
-          <Button
-            type="button"
-            variant="ghost"
-            className="-ml-2 mb-3"
-            onClick={() =>
-              navigate(`/roles/${id}`)
-            }
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Role
-          </Button>
-
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Edit Role
-          </h1>
-
-          <p className="mt-1 text-sm text-muted-foreground">
-            Update role information and scope assignment.
-          </p>
-        </div>
-
-        {submitError && (
-          <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {submitError}
-          </div>
-        )}
-
-        <form
-          onSubmit={form.handleSubmit(onSubmit)}
-          className="space-y-6"
+        <Button
+          type="button"
+          variant="ghost"
+          className="-ml-2 mb-4"
+          onClick={() =>
+            navigate(
+              `/roles/${id}`
+            )
+          }
         >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Role
+        </Button>
 
-          {/* SCOPE */}
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Edit Role
+            </CardTitle>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Globe2 className="h-5 w-5 text-primary" />
-                </div>
+            <p className="text-sm text-muted-foreground">
+              Update the role configuration.
+            </p>
+          </CardHeader>
 
-                <div>
-                  <CardTitle>
-                    Role Scope
-                  </CardTitle>
+          <CardContent>
 
-                  <CardDescription>
-                    Configure the scope in which this role is available.
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
+            {submitError && (
+              <Alert
+                variant="destructive"
+                className="mb-6"
+              >
+                <AlertDescription>
+                  {submitError}
+                </AlertDescription>
+              </Alert>
+            )}
 
-            <CardContent className="space-y-5">
+            <form
+              onSubmit={form.handleSubmit(
+                onSubmit
+              )}
+              className="space-y-6"
+            >
 
-              <Field>
-                <FieldLabel>
-                  Scope *
-                </FieldLabel>
+              {/* ROLE TYPE */}
 
-                <Select
-                  value={scopeType}
-                  onValueChange={(value) =>
-                    form.setValue(
-                      "scopeType",
-                      value as "GLOBAL" | "TENANT",
-                      {
-                        shouldValidate: true,
-                      }
-                    )
-                  }
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+              <div className="space-y-2">
+                <Label>
+                  Role Type
+                </Label>
 
-                  <SelectContent>
-                    <SelectItem value="GLOBAL">
-                      Global
-                    </SelectItem>
-
-                    <SelectItem value="TENANT">
-                      Tenant Specific
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              {scopeType === "TENANT" && (
-                <div className="grid gap-5 md:grid-cols-2">
-
-                  <Field>
-                    <FieldLabel>
-                      Tenant *
-                    </FieldLabel>
-
+                <Controller
+                  name="roleType"
+                  control={form.control}
+                  render={({
+                    field,
+                  }) => (
                     <Select
-                      value={tenantId}
-                      onValueChange={(value) =>
-                        form.setValue(
-                          "tenantId",
-                          value,
-                          {
-                            shouldValidate: true,
-                          }
-                        )
+                      value={
+                        field.value
                       }
-                      disabled={isSubmitting}
+                      onValueChange={(
+                        value
+                      ) => {
+                        field.onChange(
+                          value
+                        );
+
+                        if (
+                          value ===
+                          "GLOBAL"
+                        ) {
+                          form.setValue(
+                            "organizationId",
+                            ""
+                          );
+                        }
+                      }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select tenant" />
+                        <SelectValue />
                       </SelectTrigger>
 
                       <SelectContent>
-                        {tenants.map((tenant) => (
-                          <SelectItem
-                            key={tenant.id}
-                            value={tenant.id}
-                          >
-                            {tenant.tenantName ??
-                              tenant.name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="GLOBAL">
+                          Global
+                        </SelectItem>
+
+                        <SelectItem value="TENANT">
+                          Tenant
+                        </SelectItem>
                       </SelectContent>
                     </Select>
-
-                    <FieldError>
-                      {
-                        form.formState.errors.tenantId
-                          ?.message
-                      }
-                    </FieldError>
-                  </Field>
-
-                  <Field>
-                    <FieldLabel>
-                      Organization *
-                    </FieldLabel>
-
-                    <Select
-                      value={form.watch(
-                        "organizationId"
-                      )}
-                      onValueChange={(value) =>
-                        form.setValue(
-                          "organizationId",
-                          value,
-                          {
-                            shouldValidate: true,
-                          }
-                        )
-                      }
-                      disabled={
-                        isSubmitting || !tenantId
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select organization" />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        {filteredOrganizations.map(
-                          (organization) => (
-                            <SelectItem
-                              key={organization.id}
-                              value={organization.id}
-                            >
-                              {organization.orgName ??
-                                organization.name}
-                            </SelectItem>
-                          )
-                        )}
-                      </SelectContent>
-                    </Select>
-
-                    <FieldError>
-                      {
-                        form.formState.errors
-                          .organizationId?.message
-                      }
-                    </FieldError>
-                  </Field>
-
-                </div>
-              )}
-
-              {scopeType === "GLOBAL" && (
-                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4">
-                  <div className="flex gap-3">
-                    <Globe2 className="h-5 w-5 text-blue-600" />
-
-                    <div>
-                      <p className="text-sm font-medium">
-                        Global Role
-                      </p>
-
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Tenant and organization assignment is
-                        not required for global roles.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-            </CardContent>
-          </Card>
-
-          {/* ROLE INFORMATION */}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                Role Information
-              </CardTitle>
-
-              <CardDescription>
-                Update the role master information.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-5">
-
-              <div className="grid gap-5 md:grid-cols-2">
-
-                <Field>
-                  <FieldLabel>
-                    Role Name *
-                  </FieldLabel>
-
-                  <Input
-                    {...form.register("roleName")}
-                    disabled={isSubmitting}
-                  />
-
-                  <FieldError>
-                    {
-                      form.formState.errors.roleName
-                        ?.message
-                    }
-                  </FieldError>
-                </Field>
-
-                <Field>
-                  <FieldLabel>
-                    Role Code *
-                  </FieldLabel>
-
-                  <Input
-                    {...form.register("roleCode")}
-                    className="uppercase"
-                    disabled={isSubmitting}
-                  />
-
-                  <FieldError>
-                    {
-                      form.formState.errors.roleCode
-                        ?.message
-                    }
-                  </FieldError>
-                </Field>
-
+                  )}
+                />
               </div>
 
-              <Field>
-                <FieldLabel>
-                  Description
-                </FieldLabel>
+              {/* ORGANIZATION */}
 
-                <Textarea
-                  {...form.register("description")}
-                  rows={5}
-                  disabled={isSubmitting}
+              {roleType ===
+                "TENANT" && (
+                <div className="space-y-2">
+                  <Label>
+                    Organization
+                  </Label>
+
+                  <Controller
+                    name="organizationId"
+                    control={
+                      form.control
+                    }
+                    render={({
+                      field,
+                    }) => (
+                      <Select
+                        value={
+                          field.value
+                        }
+                        onValueChange={
+                          field.onChange
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select organization" />
+                        </SelectTrigger>
+
+                        <SelectContent>
+                          {organizations.map(
+                            (
+                              organization
+                            ) => (
+                              <SelectItem
+                                key={
+                                  organization.id
+                                }
+                                value={
+                                  organization.id
+                                }
+                              >
+                                {organization.orgName ??
+                                  organization.organizationName ??
+                                  organization.id}
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+
+                  {form.formState
+                    .errors
+                    .organizationId && (
+                    <p className="text-sm text-destructive">
+                      {
+                        form
+                          .formState
+                          .errors
+                          .organizationId
+                          .message
+                      }
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* ROLE NAME */}
+
+              <div className="space-y-2">
+                <Label>
+                  Role Name
+                </Label>
+
+                <Input
+                  {...form.register(
+                    "roleName"
+                  )}
                 />
 
-                <FieldError>
-                  {
-                    form.formState.errors.description
-                      ?.message
-                  }
-                </FieldError>
-              </Field>
+                {form.formState
+                  .errors.roleName && (
+                  <p className="text-sm text-destructive">
+                    {
+                      form
+                        .formState
+                        .errors
+                        .roleName
+                        .message
+                    }
+                  </p>
+                )}
+              </div>
 
-              <Field>
-                <FieldLabel>
-                  Status
-                </FieldLabel>
+              {/* ROLE CODE */}
 
-                <Select
-                  value={
-                    form.watch("active")
-                      ? "ACTIVE"
-                      : "INACTIVE"
+              <div className="space-y-2">
+                <Label>
+                  Role Code
+                </Label>
+
+                <Input
+                  {...form.register(
+                    "roleCode"
+                  )}
+                  disabled
+                />
+
+                <p className="text-xs text-muted-foreground">
+                  Role code is treated as the stable
+                  identifier and is not editable by the
+                  current backend update DTO.
+                </p>
+              </div>
+
+              {/* DESCRIPTION */}
+
+              <div className="space-y-2">
+                <Label>
+                  Description
+                </Label>
+
+                <Textarea
+                  {...form.register(
+                    "description"
+                  )}
+                  rows={5}
+                />
+
+                {form.formState
+                  .errors
+                  .description && (
+                  <p className="text-sm text-destructive">
+                    {
+                      form
+                        .formState
+                        .errors
+                        .description
+                        .message
+                    }
+                  </p>
+                )}
+              </div>
+
+              {/* ACTIVE */}
+
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <Label>
+                    Active
+                  </Label>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Inactive roles cannot be used for
+                    normal access.
+                  </p>
+                </div>
+
+                <Controller
+                  name="active"
+                  control={
+                    form.control
                   }
-                  onValueChange={(value) =>
-                    form.setValue(
-                      "active",
-                      value === "ACTIVE"
+                  render={({
+                    field,
+                  }) => (
+                    <Switch
+                      checked={
+                        field.value
+                      }
+                      onCheckedChange={
+                        field.onChange
+                      }
+                    />
+                  )}
+                />
+              </div>
+
+              {/* SYSTEM ROLE */}
+
+              <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
+                <div>
+                  <Label>
+                    System Role
+                  </Label>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    System roles are protected by
+                    the backend.
+                  </p>
+                </div>
+
+                <Switch
+                  checked={
+                    form.watch(
+                      "systemRole"
                     )
                   }
+                  disabled
+                />
+              </div>
+
+              {/* ACTIONS */}
+
+              <div className="flex justify-end gap-3 border-t pt-6">
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    navigate(
+                      `/roles/${id}`
+                    )
+                  }
+                  disabled={
+                    isSubmitting
+                  }
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  Cancel
+                </Button>
 
-                  <SelectContent>
-                    <SelectItem value="ACTIVE">
-                      Active
-                    </SelectItem>
+                <Button
+                  type="submit"
+                  disabled={
+                    isSubmitting
+                  }
+                >
+                  {isSubmitting && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
 
-                    <SelectItem value="INACTIVE">
-                      Inactive
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
+                  Save Changes
+                </Button>
 
-            </CardContent>
-          </Card>
+              </div>
 
-          <div className="flex justify-end gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                navigate(`/roles/${id}`)
-              }
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Update Role
-                </>
-              )}
-            </Button>
-          </div>
-
-        </form>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -51,7 +51,7 @@ export default function AppRoutes() {
         {/* Roles */}
 
         <Route path="/roles" element={<RolesPage />}/>
-        <Route path="/roles/add" element={<AddRolesPage />}/>
+        <Route path="/roles/new" element={<AddRolesPage />}/>
         <Route path="/roles/:id" element={<ViewRolesPage />} />
         <Route path="/roles/:id/edit" element={<EditRolesPage />}/>
         

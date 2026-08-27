@@ -5,18 +5,15 @@ import {
 } from "react";
 
 import {
-  keepPreviousData,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-
-import {
   Building2,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Columns3,
   Eye,
+  Filter,
+  Globe2,
   Grid2X2,
   List,
   Loader2,
@@ -24,18 +21,20 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  RotateCcw,
   Search,
+  Server,
+  ShieldCheck,
   Table2,
   Trash2,
   X,
-  Globe2,
-  Server,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
-import {
-  useNavigate,
-} from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import api from "@/api/api";
 
@@ -44,6 +43,8 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 
 import { Input } from "@/components/ui/input";
@@ -89,85 +90,84 @@ import {
    TYPES
 ============================================================ */
 
-interface Tenant {
-  id: string;
-  tenantName?: string;
-  name?: string;
-  active?: boolean;
-  deleted?: boolean;
-}
-
-interface Organization {
-  id: string;
-  orgName?: string;
-  name?: string;
-  tenantId?: string;
-  active?: boolean;
-  deleted?: boolean;
-}
+type RoleType = "GLOBAL" | "TENANT";
 
 interface Role {
   id: string;
 
+  organizationId?: string | null;
+
   roleName: string;
+
   roleCode: string;
 
   description?: string | null;
 
-  scopeType: "GLOBAL" | "TENANT";
+  roleType: RoleType;
 
-  tenantId?: string | null;
-  tenantName?: string | null;
-
-  organizationId?: string | null;
-  organizationName?: string | null;
+  systemRole: boolean;
 
   active: boolean;
+
   deleted: boolean;
 
   createdAt?: string;
+
   updatedAt?: string;
 
   version?: number;
 }
 
-interface RolePageResponse {
-  content: Role[];
-  totalElements: number;
-  totalPages: number;
-  number: number;
-  size: number;
-  first: boolean;
-  last: boolean;
+interface Organization {
+  id: string;
+
+  orgName?: string;
+
+  name?: string;
+
+  tenantId?: string | null;
+
+  active?: boolean;
+
+  deleted?: boolean;
+}
+
+interface Tenant {
+  id: string;
+
+  tenantName?: string;
+
+  name?: string;
+
+  active?: boolean;
+
+  deleted?: boolean;
 }
 
 interface RoleFilters {
   search: string;
 
   roleName: string;
+
   roleCode: string;
 
-  scopeType: string;
+  roleType: "" | RoleType;
 
   tenantId: string;
+
   organizationId: string;
 
-  status:
-    | "ACTIVE"
-    | "INACTIVE"
-    | "DELETED"
-    | "ALL";
+  systemRole: "ALL" | "SYSTEM" | "CUSTOM";
 
-  includeDeleted: boolean;
+  status: "ALL" | "ACTIVE" | "INACTIVE";
 
   createdFrom: string;
+
   createdTo: string;
 
   updatedFrom: string;
-  updatedTo: string;
 
-  sortBy: string;
-  sortDirection: "ASC" | "DESC";
+  updatedTo: string;
 }
 
 type ViewMode =
@@ -183,51 +183,62 @@ type Density =
 interface VisibleColumns {
   role: boolean;
   code: boolean;
-  scope: boolean;
-  tenant: boolean;
+  type: boolean;
   organization: boolean;
+  tenant: boolean;
+  systemRole: boolean;
   status: boolean;
   created: boolean;
   updated: boolean;
 }
 
 /* ============================================================
-   DEFAULTS
+   CONSTANTS
 ============================================================ */
 
 const DEFAULT_FILTERS: RoleFilters = {
   search: "",
 
   roleName: "",
+
   roleCode: "",
 
-  scopeType: "",
+  roleType: "",
 
   tenantId: "",
+
   organizationId: "",
+
+  systemRole: "ALL",
 
   status: "ACTIVE",
 
-  includeDeleted: false,
-
   createdFrom: "",
+
   createdTo: "",
 
   updatedFrom: "",
-  updatedTo: "",
 
-  sortBy: "createdAt",
-  sortDirection: "DESC",
+  updatedTo: "",
 };
 
 const DEFAULT_COLUMNS: VisibleColumns = {
   role: true,
+
   code: true,
-  scope: true,
-  tenant: true,
+
+  type: true,
+
   organization: true,
+
+  tenant: false,
+
+  systemRole: true,
+
   status: true,
+
   created: true,
+
   updated: false,
 };
 
@@ -258,6 +269,31 @@ function formatDate(
   ).format(date);
 }
 
+function formatDateTime(
+  value?: string
+): string {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }
+  ).format(date);
+}
+
 function getInitials(
   value?: string
 ): string {
@@ -271,171 +307,76 @@ function getInitials(
     .slice(0, 2)
     .map(
       (word) =>
-        word.charAt(0).toUpperCase()
+        word
+          .charAt(0)
+          .toUpperCase()
     )
     .join("");
 }
 
-/* ============================================================
-   API
-============================================================ */
-
-async function fetchTenants(): Promise<Tenant[]> {
-  const response = await api.get(
-    "/api/v1/tenants?size=100"
-  );
-
-  const data =
-    response.data?.data ??
-    response.data;
-
-  return data?.content ?? data ?? [];
+function getRoleTypeLabel(
+  roleType: RoleType
+): string {
+  return roleType === "GLOBAL"
+    ? "Global"
+    : "Tenant";
 }
 
-async function fetchOrganizations(): Promise<
-  Organization[]
-> {
-  const response = await api.get(
-    "/api/v1/organizations?size=100"
+function getOrganizationName(
+  organizationId: string | null | undefined,
+  organizations: Organization[]
+): string {
+  if (!organizationId) {
+    return "Platform";
+  }
+
+  const organization =
+    organizations.find(
+      (item) =>
+        item.id === organizationId
+    );
+
+  return (
+    organization?.orgName ??
+    organization?.name ??
+    organizationId
   );
-
-  const data =
-    response.data?.data ??
-    response.data;
-
-  return data?.content ?? data ?? [];
 }
 
-async function fetchRoles(
-  filters: RoleFilters,
-  page: number,
-  size: number
-): Promise<RolePageResponse> {
-  const params = new URLSearchParams();
+function getTenantName(
+  organizationId: string | null | undefined,
+  organizations: Organization[],
+  tenants: Tenant[]
+): string {
+  if (!organizationId) {
+    return "-";
+  }
 
-  params.set("page", String(page));
-  params.set("size", String(size));
-
-  if (filters.search.trim()) {
-    params.set(
-      "search",
-      filters.search.trim()
+  const organization =
+    organizations.find(
+      (item) =>
+        item.id === organizationId
     );
+
+  if (!organization?.tenantId) {
+    return "-";
   }
 
-  if (filters.roleName.trim()) {
-    params.set(
-      "roleName",
-      filters.roleName.trim()
+  const tenant =
+    tenants.find(
+      (item) =>
+        item.id === organization.tenantId
     );
-  }
 
-  if (filters.roleCode.trim()) {
-    params.set(
-      "roleCode",
-      filters.roleCode.trim()
-    );
-  }
-
-  if (filters.scopeType) {
-    params.set(
-      "scopeType",
-      filters.scopeType
-    );
-  }
-
-  if (filters.tenantId) {
-    params.set(
-      "tenantId",
-      filters.tenantId
-    );
-  }
-
-  if (filters.organizationId) {
-    params.set(
-      "organizationId",
-      filters.organizationId
-    );
-  }
-
-  if (filters.status === "ACTIVE") {
-    params.set("active", "true");
-  }
-
-  if (filters.status === "INACTIVE") {
-    params.set("active", "false");
-  }
-
-  if (filters.status === "DELETED") {
-    params.set("deleted", "true");
-    params.set(
-      "includeDeleted",
-      "true"
-    );
-  }
-
-  if (filters.status === "ALL") {
-    params.set(
-      "includeDeleted",
-      "true"
-    );
-  }
-
-  if (filters.includeDeleted) {
-    params.set(
-      "includeDeleted",
-      "true"
-    );
-  }
-
-  if (filters.createdFrom) {
-    params.set(
-      "createdFrom",
-      filters.createdFrom
-    );
-  }
-
-  if (filters.createdTo) {
-    params.set(
-      "createdTo",
-      filters.createdTo
-    );
-  }
-
-  if (filters.updatedFrom) {
-    params.set(
-      "updatedFrom",
-      filters.updatedFrom
-    );
-  }
-
-  if (filters.updatedTo) {
-    params.set(
-      "updatedTo",
-      filters.updatedTo
-    );
-  }
-
-  params.set(
-    "sortBy",
-    filters.sortBy
+  return (
+    tenant?.tenantName ??
+    tenant?.name ??
+    organization.tenantId
   );
-
-  params.set(
-    "sortDirection",
-    filters.sortDirection
-  );
-
-  const response =
-    await api.get<RolePageResponse>(
-      `/api/v1/roles/search?${params.toString()}`
-    );
-
-  return response.data;
 }
 
 /* ============================================================
-   STATUS BADGE
+   BADGES
 ============================================================ */
 
 function StatusBadge({
@@ -478,16 +419,12 @@ function StatusBadge({
   );
 }
 
-/* ============================================================
-   SCOPE BADGE
-============================================================ */
-
-function ScopeBadge({
-  scopeType,
+function RoleTypeBadge({
+  roleType,
 }: {
-  scopeType: "GLOBAL" | "TENANT";
+  roleType: RoleType;
 }) {
-  if (scopeType === "GLOBAL") {
+  if (roleType === "GLOBAL") {
     return (
       <Badge
         variant="outline"
@@ -510,16 +447,126 @@ function ScopeBadge({
   );
 }
 
+function SystemRoleBadge({
+  systemRole,
+}: {
+  systemRole: boolean;
+}) {
+  if (systemRole) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-primary/30 bg-primary/5 text-primary"
+      >
+        <ShieldCheck className="mr-1 h-3.5 w-3.5" />
+        System
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge
+      variant="outline"
+      className="text-muted-foreground"
+    >
+      Custom
+    </Badge>
+  );
+}
+
 /* ============================================================
-   ACTIONS
+   API
+============================================================ */
+
+async function fetchRoles(): Promise<Role[]> {
+  const response =
+    await api.get("/api/v1/roles");
+
+  const data =
+    response.data?.data ??
+    response.data;
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.content)) {
+    return data.content;
+  }
+
+  return [];
+}
+
+async function fetchOrganizations(): Promise<
+  Organization[]
+> {
+  const response =
+    await api.get(
+      "/api/v1/organizations?size=1000"
+    );
+
+  const data =
+    response.data?.data ??
+    response.data;
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.content)) {
+    return data.content;
+  }
+
+  return [];
+}
+
+async function fetchTenants(): Promise<
+  Tenant[]
+> {
+  /*
+   * This endpoint is optional.
+   *
+   * If your application does not have
+   * /api/v1/tenants, the page will gracefully
+   * fall back to organizations' tenantId values.
+   */
+
+  try {
+    const response =
+      await api.get(
+        "/api/v1/tenants?size=1000"
+      );
+
+    const data =
+      response.data?.data ??
+      response.data;
+
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    if (Array.isArray(data?.content)) {
+      return data.content;
+    }
+
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/* ============================================================
+   ACTION MENU
 ============================================================ */
 
 interface RoleActionsProps {
   role: Role;
+
   onView: () => void;
+
   onEdit: () => void;
+
   onDelete: () => void;
-  onRestore: () => void;
 }
 
 function RoleActions({
@@ -527,7 +574,6 @@ function RoleActions({
   onView,
   onEdit,
   onDelete,
-  onRestore,
 }: RoleActionsProps) {
   return (
     <DropdownMenu>
@@ -544,34 +590,46 @@ function RoleActions({
         align="end"
         className="w-44"
       >
-        <DropdownMenuItem onClick={onView}>
+        <DropdownMenuItem
+          onClick={onView}
+        >
           <Eye className="mr-2 h-4 w-4" />
           View
         </DropdownMenuItem>
 
-        {!role.deleted && (
-          <DropdownMenuItem onClick={onEdit}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit
-          </DropdownMenuItem>
-        )}
+        {!role.deleted &&
+          !role.systemRole && (
+            <DropdownMenuItem
+              onClick={onEdit}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+          )}
 
-        <DropdownMenuSeparator />
-
-        {role.deleted ? (
-          <DropdownMenuItem onClick={onRestore}>
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Restore
-          </DropdownMenuItem>
-        ) : (
+        {role.systemRole && (
           <DropdownMenuItem
-            onClick={onDelete}
-            className="text-destructive focus:text-destructive"
+            onClick={onView}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
+            <ShieldCheck className="mr-2 h-4 w-4" />
+            View System Role
           </DropdownMenuItem>
         )}
+
+        {!role.systemRole &&
+          !role.deleted && (
+            <>
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem
+                onClick={onDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -582,13 +640,22 @@ function RoleActions({
 ============================================================ */
 
 export default function RolesPage() {
-  const navigate = useNavigate();
+  const navigate =
+    useNavigate();
 
   const queryClient =
     useQueryClient();
 
+  /* ==========================================================
+     SEARCH
+  ========================================================== */
+
   const [searchInput, setSearchInput] =
-    useState("");
+    useState<string>("");
+
+  /* ==========================================================
+     FILTERS
+  ========================================================== */
 
   const [filters, setFilters] =
     useState<RoleFilters>(
@@ -601,13 +668,21 @@ export default function RolesPage() {
     );
 
   const [filterOpen, setFilterOpen] =
-    useState(false);
+    useState<boolean>(false);
+
+  /* ==========================================================
+     PAGINATION
+  ========================================================== */
 
   const [page, setPage] =
-    useState(0);
+    useState<number>(0);
 
   const [pageSize, setPageSize] =
-    useState(20);
+    useState<number>(20);
+
+  /* ==========================================================
+     VIEW
+  ========================================================== */
 
   const [viewMode, setViewMode] =
     useState<ViewMode>("table");
@@ -615,43 +690,85 @@ export default function RolesPage() {
   const [density, setDensity] =
     useState<Density>("standard");
 
+  /* ==========================================================
+     COLUMNS
+  ========================================================== */
+
   const [visibleColumns, setVisibleColumns] =
     useState<VisibleColumns>(
       DEFAULT_COLUMNS
     );
 
+  /* ==========================================================
+     ERROR
+  ========================================================== */
+
   const [actionError, setActionError] =
-    useState("");
+    useState<string>("");
+
+  /* ==========================================================
+     SELECTED ROLE
+  ========================================================== */
+
+  const [selectedRole, setSelectedRole] =
+    useState<Role | null>(null);
+
+  const [viewOpen, setViewOpen] =
+    useState<boolean>(false);
 
   /* ==========================================================
      LOCAL STORAGE
   ========================================================== */
 
   useEffect(() => {
-    const savedView =
-      localStorage.getItem(
-        "roles-view"
-      );
+    try {
+      const savedView =
+        localStorage.getItem(
+          "roles-view"
+        );
 
-    if (
-      savedView === "table" ||
-      savedView === "list" ||
-      savedView === "card"
-    ) {
-      setViewMode(savedView);
-    }
+      if (
+        savedView === "table" ||
+        savedView === "list" ||
+        savedView === "card"
+      ) {
+        setViewMode(savedView);
+      }
 
-    const savedDensity =
-      localStorage.getItem(
-        "roles-density"
-      );
+      const savedDensity =
+        localStorage.getItem(
+          "roles-density"
+        );
 
-    if (
-      savedDensity === "comfortable" ||
-      savedDensity === "standard" ||
-      savedDensity === "compact"
-    ) {
-      setDensity(savedDensity);
+      if (
+        savedDensity ===
+          "comfortable" ||
+        savedDensity ===
+          "standard" ||
+        savedDensity ===
+          "compact"
+      ) {
+        setDensity(savedDensity);
+      }
+
+      const savedColumns =
+        localStorage.getItem(
+          "roles-columns"
+        );
+
+      if (savedColumns) {
+        const parsed =
+          JSON.parse(savedColumns);
+
+        setVisibleColumns(
+          {
+            ...DEFAULT_COLUMNS,
+            ...parsed,
+          }
+        );
+      }
+    } catch {
+      // Ignore invalid local storage values.
     }
   }, []);
 
@@ -669,21 +786,14 @@ export default function RolesPage() {
     );
   }, [density]);
 
-  /* ==========================================================
-     TENANTS
-  ========================================================== */
-
-  const {
-    data: tenants = [],
-    isLoading: tenantsLoading,
-  } = useQuery({
-    queryKey: [
-      "tenants",
-      "role-selector",
-    ],
-    queryFn: fetchTenants,
-    staleTime: 60_000,
-  });
+  useEffect(() => {
+    localStorage.setItem(
+      "roles-columns",
+      JSON.stringify(
+        visibleColumns
+      )
+    );
+  }, [visibleColumns]);
 
   /* ==========================================================
      ORGANIZATIONS
@@ -691,13 +801,35 @@ export default function RolesPage() {
 
   const {
     data: organizations = [],
-    isLoading: organizationsLoading,
+    isLoading:
+      organizationsLoading,
   } = useQuery({
     queryKey: [
       "organizations",
       "role-selector",
     ],
-    queryFn: fetchOrganizations,
+
+    queryFn:
+      fetchOrganizations,
+
+    staleTime: 60_000,
+  });
+
+  /* ==========================================================
+     TENANTS
+  ========================================================== */
+
+  const {
+    data: tenants = [],
+  } = useQuery({
+    queryKey: [
+      "tenants",
+      "role-selector",
+    ],
+
+    queryFn:
+      fetchTenants,
+
     staleTime: 60_000,
   });
 
@@ -706,87 +838,802 @@ export default function RolesPage() {
   ========================================================== */
 
   const {
-    data,
+    data: allRoles = [],
     isLoading,
     isFetching,
     isError,
     error,
     refetch,
   } = useQuery({
-    queryKey: [
-      "roles",
-      page,
-      pageSize,
-      filters,
-    ],
+    queryKey: ["roles"],
 
-    queryFn: () =>
-      fetchRoles(
-        filters,
-        page,
-        pageSize
-      ),
+    queryFn:
+      fetchRoles,
 
-    placeholderData:
-      keepPreviousData,
+    staleTime: 30_000,
   });
 
-  const roles =
-    data?.content ?? [];
+  /* ==========================================================
+     FILTERED DATA
+  ========================================================== */
+
+  const filteredRoles =
+    useMemo(() => {
+      let result = [
+        ...allRoles,
+      ];
+
+      /* ------------------------------------------------------
+         SEARCH
+      ------------------------------------------------------ */
+
+      const search =
+        filters.search
+          .trim()
+          .toLowerCase();
+
+      if (search) {
+        result =
+          result.filter(
+            (role) => {
+              const organizationName =
+                getOrganizationName(
+                  role.organizationId,
+                  organizations
+                );
+
+              const tenantName =
+                getTenantName(
+                  role.organizationId,
+                  organizations,
+                  tenants
+                );
+
+              return (
+                role.roleName
+                  ?.toLowerCase()
+                  .includes(search) ||
+
+                role.roleCode
+                  ?.toLowerCase()
+                  .includes(search) ||
+
+                role.description
+                  ?.toLowerCase()
+                  .includes(search) ||
+
+                organizationName
+                  .toLowerCase()
+                  .includes(search) ||
+
+                tenantName
+                  .toLowerCase()
+                  .includes(search)
+              );
+            }
+          );
+      }
+
+      /* ------------------------------------------------------
+         ROLE NAME
+      ------------------------------------------------------ */
+
+      if (
+        filters.roleName.trim()
+      ) {
+        const value =
+          filters.roleName
+            .trim()
+            .toLowerCase();
+
+        result =
+          result.filter(
+            (role) =>
+              role.roleName
+                ?.toLowerCase()
+                .includes(value)
+          );
+      }
+
+      /* ------------------------------------------------------
+         ROLE CODE
+      ------------------------------------------------------ */
+
+      if (
+        filters.roleCode.trim()
+      ) {
+        const value =
+          filters.roleCode
+            .trim()
+            .toLowerCase();
+
+        result =
+          result.filter(
+            (role) =>
+              role.roleCode
+                ?.toLowerCase()
+                .includes(value)
+          );
+      }
+
+      /* ------------------------------------------------------
+         ROLE TYPE
+      ------------------------------------------------------ */
+
+      if (filters.roleType) {
+        result =
+          result.filter(
+            (role) =>
+              role.roleType ===
+              filters.roleType
+          );
+      }
+
+      /* ------------------------------------------------------
+         ORGANIZATION
+      ------------------------------------------------------ */
+
+      if (
+        filters.organizationId
+      ) {
+        result =
+          result.filter(
+            (role) =>
+              role.organizationId ===
+              filters.organizationId
+          );
+      }
+
+      /* ------------------------------------------------------
+         TENANT
+      ------------------------------------------------------ */
+
+      if (filters.tenantId) {
+        result =
+          result.filter(
+            (role) => {
+              const organization =
+                organizations.find(
+                  (item) =>
+                    item.id ===
+                    role.organizationId
+                );
+
+              return (
+                organization?.tenantId ===
+                filters.tenantId
+              );
+            }
+          );
+      }
+
+      /* ------------------------------------------------------
+         SYSTEM / CUSTOM
+      ------------------------------------------------------ */
+
+      if (
+        filters.systemRole ===
+        "SYSTEM"
+      ) {
+        result =
+          result.filter(
+            (role) =>
+              role.systemRole ===
+              true
+          );
+      }
+
+      if (
+        filters.systemRole ===
+        "CUSTOM"
+      ) {
+        result =
+          result.filter(
+            (role) =>
+              role.systemRole ===
+              false
+          );
+      }
+
+      /* ------------------------------------------------------
+         STATUS
+      ------------------------------------------------------ */
+
+      if (
+        filters.status ===
+        "ACTIVE"
+      ) {
+        result =
+          result.filter(
+            (role) =>
+              role.active ===
+                true &&
+              role.deleted ===
+                false
+          );
+      }
+
+      if (
+        filters.status ===
+        "INACTIVE"
+      ) {
+        result =
+          result.filter(
+            (role) =>
+              role.active ===
+                false &&
+              role.deleted ===
+                false
+          );
+      }
+
+      /*
+       * Deleted roles are currently not returned
+       * by your GET /api/v1/roles endpoint because
+       * your repository uses findByDeletedFalse().
+       *
+       * Therefore there is intentionally no DELETED
+       * filter here.
+       */
+
+      /* ------------------------------------------------------
+         CREATED FROM
+      ------------------------------------------------------ */
+
+      if (
+        filters.createdFrom
+      ) {
+        const from =
+          new Date(
+            filters.createdFrom
+          ).getTime();
+
+        result =
+          result.filter(
+            (role) => {
+              if (
+                !role.createdAt
+              ) {
+                return false;
+              }
+
+              return (
+                new Date(
+                  role.createdAt
+                ).getTime() >=
+                from
+              );
+            }
+          );
+      }
+
+      /* ------------------------------------------------------
+         CREATED TO
+      ------------------------------------------------------ */
+
+      if (
+        filters.createdTo
+      ) {
+        const to =
+          new Date(
+            `${filters.createdTo}T23:59:59`
+          ).getTime();
+
+        result =
+          result.filter(
+            (role) => {
+              if (
+                !role.createdAt
+              ) {
+                return false;
+              }
+
+              return (
+                new Date(
+                  role.createdAt
+                ).getTime() <=
+                to
+              );
+            }
+          );
+      }
+
+      /* ------------------------------------------------------
+         UPDATED FROM
+      ------------------------------------------------------ */
+
+      if (
+        filters.updatedFrom
+      ) {
+        const from =
+          new Date(
+            filters.updatedFrom
+          ).getTime();
+
+        result =
+          result.filter(
+            (role) => {
+              if (
+                !role.updatedAt
+              ) {
+                return false;
+              }
+
+              return (
+                new Date(
+                  role.updatedAt
+                ).getTime() >=
+                from
+              );
+            }
+          );
+      }
+
+      /* ------------------------------------------------------
+         UPDATED TO
+      ------------------------------------------------------ */
+
+      if (
+        filters.updatedTo
+      ) {
+        const to =
+          new Date(
+            `${filters.updatedTo}T23:59:59`
+          ).getTime();
+
+        result =
+          result.filter(
+            (role) => {
+              if (
+                !role.updatedAt
+              ) {
+                return false;
+              }
+
+              return (
+                new Date(
+                  role.updatedAt
+                ).getTime() <=
+                to
+              );
+            }
+          );
+      }
+
+      return result;
+    }, [
+      allRoles,
+      filters,
+      organizations,
+      tenants,
+    ]);
+
+  /* ==========================================================
+     SORT
+  ========================================================== */
+
+  const [sortField, setSortField] =
+    useState<
+      | "roleName"
+      | "roleCode"
+      | "roleType"
+      | "createdAt"
+      | "updatedAt"
+    >("createdAt");
+
+  const [sortDirection, setSortDirection] =
+    useState<
+      "ASC" | "DESC"
+    >("DESC");
+
+  const sortedRoles =
+    useMemo(() => {
+      const result = [
+        ...filteredRoles,
+      ];
+
+      result.sort(
+        (a, b) => {
+          let first = "";
+          let second = "";
+
+          switch (sortField) {
+            case "roleName":
+              first =
+                a.roleName ??
+                "";
+              second =
+                b.roleName ??
+                "";
+              break;
+
+            case "roleCode":
+              first =
+                a.roleCode ??
+                "";
+              second =
+                b.roleCode ??
+                "";
+              break;
+
+            case "roleType":
+              first =
+                a.roleType ??
+                "";
+              second =
+                b.roleType ??
+                "";
+              break;
+
+            case "createdAt":
+              first =
+                a.createdAt ??
+                "";
+              second =
+                b.createdAt ??
+                "";
+              break;
+
+            case "updatedAt":
+              first =
+                a.updatedAt ??
+                "";
+              second =
+                b.updatedAt ??
+                "";
+              break;
+          }
+
+          const comparison =
+            first.localeCompare(
+              second,
+              undefined,
+              {
+                numeric: true,
+                sensitivity:
+                  "base",
+              }
+            );
+
+          return sortDirection ===
+            "ASC"
+            ? comparison
+            : -comparison;
+        }
+      );
+
+      return result;
+    }, [
+      filteredRoles,
+      sortField,
+      sortDirection,
+    ]);
+
+  /* ==========================================================
+     PAGINATION
+  ========================================================== */
 
   const totalElements =
-    data?.totalElements ?? 0;
+    sortedRoles.length;
 
   const totalPages =
-    data?.totalPages ?? 0;
+    Math.max(
+      1,
+      Math.ceil(
+        totalElements /
+          pageSize
+      )
+    );
+
+  const safePage =
+    Math.min(
+      page,
+      totalPages - 1
+    );
+
+  useEffect(() => {
+    if (page !== safePage) {
+      setPage(safePage);
+    }
+  }, [
+    page,
+    safePage,
+  ]);
+
+  const paginatedRoles =
+    sortedRoles.slice(
+      safePage * pageSize,
+      safePage * pageSize +
+        pageSize
+    );
+
+  const startItem =
+    totalElements === 0
+      ? 0
+      : safePage * pageSize + 1;
+
+  const endItem =
+    Math.min(
+      (safePage + 1) *
+        pageSize,
+      totalElements
+    );
 
   /* ==========================================================
      SEARCH
   ========================================================== */
 
-  const handleSearch = () => {
-    setFilters((current) => ({
-      ...current,
-      search:
-        searchInput.trim(),
-    }));
+  const handleSearch =
+    () => {
+      setFilters(
+        (current) => ({
+          ...current,
+          search:
+            searchInput.trim(),
+        })
+      );
 
-    setPage(0);
-  };
+      setPage(0);
+    };
 
-  const clearSearch = () => {
-    setSearchInput("");
+  const clearSearch =
+    () => {
+      setSearchInput("");
 
-    setFilters((current) => ({
-      ...current,
-      search: "",
-    }));
+      setFilters(
+        (current) => ({
+          ...current,
+          search: "",
+        })
+      );
 
-    setPage(0);
-  };
+      setPage(0);
+    };
 
   /* ==========================================================
      FILTER
   ========================================================== */
 
-  const openFilters = () => {
-    setDraftFilters(filters);
-    setFilterOpen(true);
-  };
+  const openFilters =
+    () => {
+      setDraftFilters(
+        filters
+      );
 
-  const applyFilters = () => {
-    setFilters({
-      ...draftFilters,
-      search: filters.search,
-    });
+      setFilterOpen(true);
+    };
 
-    setPage(0);
-    setFilterOpen(false);
-  };
+  const applyFilters =
+    () => {
+      setFilters(
+        draftFilters
+      );
 
-  const resetFilters = () => {
-    setDraftFilters(
-      DEFAULT_FILTERS
+      setPage(0);
+
+      setFilterOpen(false);
+    };
+
+  const resetFilters =
+    () => {
+      setDraftFilters(
+        DEFAULT_FILTERS
+      );
+    };
+
+  const clearAllFilters =
+    () => {
+      setSearchInput("");
+
+      setFilters(
+        DEFAULT_FILTERS
+      );
+
+      setDraftFilters(
+        DEFAULT_FILTERS
+      );
+
+      setPage(0);
+    };
+
+  /* ==========================================================
+     ACTIVE FILTERS
+  ========================================================== */
+
+  const activeFilterLabels =
+    useMemo(() => {
+      const result: string[] =
+        [];
+
+      if (filters.search) {
+        result.push(
+          `Search: ${filters.search}`
+        );
+      }
+
+      if (
+        filters.roleName
+      ) {
+        result.push(
+          `Name: ${filters.roleName}`
+        );
+      }
+
+      if (
+        filters.roleCode
+      ) {
+        result.push(
+          `Code: ${filters.roleCode}`
+        );
+      }
+
+      if (
+        filters.roleType
+      ) {
+        result.push(
+          filters.roleType ===
+            "GLOBAL"
+            ? "Global"
+            : "Tenant"
+        );
+      }
+
+      if (
+        filters.organizationId
+      ) {
+        result.push(
+          `Organization: ${getOrganizationName(
+            filters.organizationId,
+            organizations
+          )}`
+        );
+      }
+
+      if (
+        filters.tenantId
+      ) {
+        const tenant =
+          tenants.find(
+            (item) =>
+              item.id ===
+              filters.tenantId
+          );
+
+        result.push(
+          `Tenant: ${
+            tenant?.tenantName ??
+            tenant?.name ??
+            filters.tenantId
+          }`
+        );
+      }
+
+      if (
+        filters.systemRole !==
+        "ALL"
+      ) {
+        result.push(
+          filters.systemRole ===
+            "SYSTEM"
+            ? "System roles"
+            : "Custom roles"
+        );
+      }
+
+      if (
+        filters.status !==
+        "ACTIVE"
+      ) {
+        result.push(
+          filters.status ===
+            "INACTIVE"
+            ? "Inactive"
+            : "All"
+        );
+      }
+
+      if (
+        filters.createdFrom
+      ) {
+        result.push(
+          `Created from: ${filters.createdFrom}`
+        );
+      }
+
+      if (
+        filters.createdTo
+      ) {
+        result.push(
+          `Created to: ${filters.createdTo}`
+        );
+      }
+
+      if (
+        filters.updatedFrom
+      ) {
+        result.push(
+          `Updated from: ${filters.updatedFrom}`
+        );
+      }
+
+      if (
+        filters.updatedTo
+      ) {
+        result.push(
+          `Updated to: ${filters.updatedTo}`
+        );
+      }
+
+      return result;
+    }, [
+      filters,
+      organizations,
+      tenants,
+    ]);
+
+  /* ==========================================================
+     SORT
+  ========================================================== */
+
+  const changeSort =
+    (
+      field:
+        | "roleName"
+        | "roleCode"
+        | "roleType"
+        | "createdAt"
+        | "updatedAt"
+    ) => {
+      if (
+        sortField === field
+      ) {
+        setSortDirection(
+          (current) =>
+            current ===
+            "ASC"
+              ? "DESC"
+              : "ASC"
+        );
+      } else {
+        setSortField(field);
+
+        setSortDirection(
+          "ASC"
+        );
+      }
+
+      setPage(0);
+    };
+
+  const SortIcon = ({
+    field,
+  }: {
+    field:
+      | "roleName"
+      | "roleCode"
+      | "roleType"
+      | "createdAt"
+      | "updatedAt";
+  }) => {
+    if (
+      sortField !== field
+    ) {
+      return (
+        <ArrowUpDown className="ml-1 h-3.5 w-3.5 opacity-50" />
+      );
+    }
+
+    if (
+      sortDirection ===
+      "ASC"
+    ) {
+      return (
+        <ArrowUp className="ml-1 h-3.5 w-3.5" />
+      );
+    }
+
+    return (
+      <ArrowDown className="ml-1 h-3.5 w-3.5" />
     );
   };
 
@@ -794,173 +1641,114 @@ export default function RolesPage() {
      DELETE
   ========================================================== */
 
-  const handleDelete = async (
-    role: Role
-  ) => {
-    const confirmed =
-      window.confirm(
-        `Delete role "${role.roleName}"?`
-      );
+  const handleDelete =
+    async (
+      role: Role
+    ) => {
+      if (
+        role.systemRole
+      ) {
+        setActionError(
+          "System roles cannot be deleted."
+        );
 
-    if (!confirmed) {
-      return;
-    }
+        return;
+      }
 
-    try {
-      setActionError("");
+      const confirmed =
+        window.confirm(
+          `Delete role "${role.roleName}"?`
+        );
 
-      await api.delete(
-        `/api/v1/roles/${role.id}`
-      );
+      if (!confirmed) {
+        return;
+      }
 
-      await queryClient.invalidateQueries({
-        queryKey: ["roles"],
-      });
-    } catch (error: any) {
-      setActionError(
-        error?.response?.data
-          ?.message ??
-          "Failed to delete role."
-      );
-    }
-  };
+      try {
+        setActionError("");
 
-  /* ==========================================================
-     RESTORE
-  ========================================================== */
+        await api.delete(
+          `/api/v1/roles/${role.id}`
+        );
 
-  const handleRestore = async (
-    role: Role
-  ) => {
-    const confirmed =
-      window.confirm(
-        `Restore role "${role.roleName}"?`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setActionError("");
-
-      await api.put(
-        `/api/v1/roles/${role.id}/restore`
-      );
-
-      await queryClient.invalidateQueries({
-        queryKey: ["roles"],
-      });
-    } catch (error: any) {
-      setActionError(
-        error?.response?.data
-          ?.message ??
-          "Failed to restore role."
-      );
-    }
-  };
-
-  /* ==========================================================
-     ACTIVE FILTERS
-  ========================================================== */
-
-  const activeFilters = useMemo(() => {
-    const result: string[] = [];
-
-    if (filters.scopeType) {
-      result.push(
-        filters.scopeType === "GLOBAL"
-          ? "Global"
-          : "Tenant"
-      );
-    }
-
-    if (filters.tenantId) {
-      const tenant = tenants.find(
-        (item) =>
-          item.id === filters.tenantId
-      );
-
-      if (tenant) {
-        result.push(
-          tenant.tenantName ??
-            tenant.name ??
-            "Tenant"
+        await queryClient.invalidateQueries(
+          {
+            queryKey: [
+              "roles",
+            ],
+          }
+        );
+      } catch (
+        error: any
+      ) {
+        setActionError(
+          error?.response
+            ?.data?.message ??
+            "Failed to delete role."
         );
       }
-    }
+    };
 
-    if (filters.organizationId) {
-      const organization =
-        organizations.find(
-          (item) =>
-            item.id ===
-            filters.organizationId
-        );
+  /* ==========================================================
+     VIEW
+  ========================================================== */
 
-      if (organization) {
-        result.push(
-          organization.orgName ??
-            organization.name ??
-            "Organization"
-        );
-      }
-    }
-
-    if (
-      filters.status !==
-      "ACTIVE"
-    ) {
-      result.push(
-        filters.status
+  const handleView =
+    (role: Role) => {
+      setSelectedRole(
+        role
       );
-    }
 
-    if (filters.roleName) {
-      result.push(
-        `Name: ${filters.roleName}`
+      setViewOpen(true);
+    };
+
+  /* ==========================================================
+     COLUMN TOGGLE
+  ========================================================== */
+
+  const toggleColumn =
+    (
+      column: keyof VisibleColumns
+    ) => {
+      setVisibleColumns(
+        (current) => ({
+          ...current,
+          [column]:
+            !current[column],
+        })
       );
-    }
-
-    if (filters.roleCode) {
-      result.push(
-        `Code: ${filters.roleCode}`
-      );
-    }
-
-    return result;
-  }, [
-    filters,
-    tenants,
-    organizations,
-  ]);
-
-  const filterOrganizations =
-    draftFilters.tenantId
-      ? organizations.filter(
-          (organization) =>
-            !organization.tenantId ||
-            organization.tenantId ===
-              draftFilters.tenantId
-        )
-      : [];
+    };
 
   /* ==========================================================
      DENSITY
   ========================================================== */
 
   const rowClass =
-    density === "compact"
+    density ===
+    "compact"
       ? "h-10"
-      : density === "comfortable"
+      : density ===
+        "comfortable"
       ? "h-16"
       : "h-12";
+
+  const cardPadding =
+    density ===
+    "compact"
+      ? "p-3"
+      : density ===
+        "comfortable"
+      ? "p-5"
+      : "p-4";
 
   /* ==========================================================
      LOADING
   ========================================================== */
 
-  if (isLoading && !data) {
+  if (
+    isLoading &&
+    allRoles.length === 0
+  ) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -975,17 +1763,59 @@ export default function RolesPage() {
   }
 
   /* ==========================================================
+     ERROR
+  ========================================================== */
+
+  if (isError) {
+    return (
+      <div className="w-full min-w-0 p-4 sm:p-6">
+        <Card>
+          <CardContent className="p-6">
+            <p className="font-medium text-destructive">
+              Failed to load roles
+            </p>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              {(
+                error as any
+              )?.response
+                ?.data?.message ??
+                (
+                  error as Error
+                )?.message ??
+                "Unable to load roles."
+              }
+            </p>
+
+            <Button
+              className="mt-4"
+              variant="outline"
+              onClick={() =>
+                refetch()
+              }
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  /* ==========================================================
      RENDER
   ========================================================== */
 
   return (
     <div className="w-full min-w-0 bg-muted/20">
+      <div className="w-full min-w-0 p-4 sm:p-6">
 
-      <div className="w-full p-4 sm:p-6">
+        {/* =====================================================
+            HEADER
+        ===================================================== */}
 
-        {/* HEADER */}
-
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
@@ -993,89 +1823,206 @@ export default function RolesPage() {
             </h1>
 
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage global and tenant-specific access roles.
+              Manage global and organization-specific access roles.
             </p>
           </div>
 
           <Button
             onClick={() =>
-              navigate("/roles/add")
+              navigate(
+                "/roles/new"
+              )
             }
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Role
           </Button>
-
         </div>
 
-        {/* ERROR */}
+        {/* =====================================================
+            SUMMARY CARDS
+        ===================================================== */}
 
-        {actionError && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {actionError}
-          </div>
-        )}
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
-        {isError && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {(error as any)?.message ??
-              "Failed to load roles."}
-          </div>
-        )}
+          <Card>
+            <CardContent className="flex items-center justify-between p-4">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Total Roles
+                </p>
 
-        {/* SEARCH */}
+                <p className="mt-1 text-2xl font-semibold">
+                  {allRoles.length}
+                </p>
+              </div>
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex items-center justify-between p-4">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Global Roles
+                </p>
+
+                <p className="mt-1 text-2xl font-semibold">
+                  {
+                    allRoles.filter(
+                      (role) =>
+                        role.roleType ===
+                        "GLOBAL"
+                    ).length
+                  }
+                </p>
+              </div>
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
+                <Globe2 className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex items-center justify-between p-4">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Tenant Roles
+                </p>
+
+                <p className="mt-1 text-2xl font-semibold">
+                  {
+                    allRoles.filter(
+                      (role) =>
+                        role.roleType ===
+                        "TENANT"
+                    ).length
+                  }
+                </p>
+              </div>
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600">
+                <Building2 className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex items-center justify-between p-4">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  System Roles
+                </p>
+
+                <p className="mt-1 text-2xl font-semibold">
+                  {
+                    allRoles.filter(
+                      (role) =>
+                        role.systemRole
+                    ).length
+                  }
+                </p>
+              </div>
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600">
+                <Server className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* =====================================================
+            TOOLBAR
+        ===================================================== */}
 
         <Card className="mb-4">
           <CardContent className="p-4">
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col gap-3 xl:flex-row">
 
-              <div className="relative min-w-[260px] flex-1">
+              {/* SEARCH */}
+
+              <div className="relative min-w-0 flex-1">
+
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
                 <Input
-                  value={searchInput}
-                  onChange={(event) =>
+                  value={
+                    searchInput
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setSearchInput(
                       event.target.value
                     )
                   }
-                  onKeyDown={(event) => {
+                  onKeyDown={(
+                    event
+                  ) => {
                     if (
-                      event.key === "Enter"
+                      event.key ===
+                      "Enter"
                     ) {
                       handleSearch();
                     }
                   }}
-                  placeholder="Search roles..."
-                  className="pl-9"
+                  placeholder="Search roles, code, organization or description..."
+                  className="pl-9 pr-9"
                 />
 
                 {searchInput && (
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
-                    onClick={clearSearch}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={
+                      clearSearch
+                    }
                   >
                     <X className="h-4 w-4" />
-                  </Button>
+                  </button>
                 )}
               </div>
 
               <Button
-                onClick={handleSearch}
+                variant="outline"
+                onClick={
+                  handleSearch
+                }
               >
+                <Search className="mr-2 h-4 w-4" />
                 Search
               </Button>
 
+              {/* FILTER */}
+
               <Button
                 variant="outline"
-                onClick={openFilters}
+                onClick={
+                  openFilters
+                }
               >
+                <Filter className="mr-2 h-4 w-4" />
                 Filters
+
+                {activeFilterLabels.length >
+                  0 && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-2"
+                  >
+                    {
+                      activeFilterLabels.length
+                    }
+                  </Badge>
+                )}
               </Button>
+
+              {/* REFRESH */}
 
               <Button
                 variant="outline"
@@ -1083,483 +2030,911 @@ export default function RolesPage() {
                 onClick={() =>
                   refetch()
                 }
+                disabled={
+                  isFetching
+                }
+                title="Refresh"
               >
                 <RefreshCw
-                  className={
+                  className={`h-4 w-4 ${
                     isFetching
-                      ? "h-4 w-4 animate-spin"
-                      : "h-4 w-4"
-                  }
+                      ? "animate-spin"
+                      : ""
+                  }`}
                 />
               </Button>
 
+              {/* VIEW */}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  asChild
+                >
+                  <Button
+                    variant="outline"
+                  >
+                    {viewMode ===
+                    "table" ? (
+                      <Table2 className="mr-2 h-4 w-4" />
+                    ) : viewMode ===
+                      "list" ? (
+                      <List className="mr-2 h-4 w-4" />
+                    ) : (
+                      <Grid2X2 className="mr-2 h-4 w-4" />
+                    )}
+
+                    View
+
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent align="end">
+
+                  <DropdownMenuItem
+                    onClick={() =>
+                      setViewMode(
+                        "table"
+                      )
+                    }
+                  >
+                    <Table2 className="mr-2 h-4 w-4" />
+                    Table
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() =>
+                      setViewMode(
+                        "list"
+                      )
+                    }
+                  >
+                    <List className="mr-2 h-4 w-4" />
+                    List
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() =>
+                      setViewMode(
+                        "card"
+                      )
+                    }
+                  >
+                    <Grid2X2 className="mr-2 h-4 w-4" />
+                    Cards
+                  </DropdownMenuItem>
+
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* DENSITY */}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  asChild
+                >
+                  <Button
+                    variant="outline"
+                  >
+                    Density
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent align="end">
+
+                  <DropdownMenuItem
+                    onClick={() =>
+                      setDensity(
+                        "comfortable"
+                      )
+                    }
+                  >
+                    Comfortable
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() =>
+                      setDensity(
+                        "standard"
+                      )
+                    }
+                  >
+                    Standard
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() =>
+                      setDensity(
+                        "compact"
+                      )
+                    }
+                  >
+                    Compact
+                  </DropdownMenuItem>
+
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* COLUMNS */}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  asChild
+                >
+                  <Button
+                    variant="outline"
+                  >
+                    <Columns3 className="mr-2 h-4 w-4" />
+                    Columns
+                  </Button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent
+                  align="end"
+                  className="w-52"
+                >
+
+                  <DropdownMenuCheckboxItem
+                    checked={
+                      visibleColumns.role
+                    }
+                    onCheckedChange={() =>
+                      toggleColumn(
+                        "role"
+                      )
+                    }
+                  >
+                    Role
+                  </DropdownMenuCheckboxItem>
+
+                  <DropdownMenuCheckboxItem
+                    checked={
+                      visibleColumns.code
+                    }
+                    onCheckedChange={() =>
+                      toggleColumn(
+                        "code"
+                      )
+                    }
+                  >
+                    Code
+                  </DropdownMenuCheckboxItem>
+
+                  <DropdownMenuCheckboxItem
+                    checked={
+                      visibleColumns.type
+                    }
+                    onCheckedChange={() =>
+                      toggleColumn(
+                        "type"
+                      )
+                    }
+                  >
+                    Type
+                  </DropdownMenuCheckboxItem>
+
+                  <DropdownMenuCheckboxItem
+                    checked={
+                      visibleColumns.organization
+                    }
+                    onCheckedChange={() =>
+                      toggleColumn(
+                        "organization"
+                      )
+                    }
+                  >
+                    Organization
+                  </DropdownMenuCheckboxItem>
+
+                  <DropdownMenuCheckboxItem
+                    checked={
+                      visibleColumns.tenant
+                    }
+                    onCheckedChange={() =>
+                      toggleColumn(
+                        "tenant"
+                      )
+                    }
+                  >
+                    Tenant
+                  </DropdownMenuCheckboxItem>
+
+                  <DropdownMenuCheckboxItem
+                    checked={
+                      visibleColumns.systemRole
+                    }
+                    onCheckedChange={() =>
+                      toggleColumn(
+                        "systemRole"
+                      )
+                    }
+                  >
+                    System Role
+                  </DropdownMenuCheckboxItem>
+
+                  <DropdownMenuCheckboxItem
+                    checked={
+                      visibleColumns.status
+                    }
+                    onCheckedChange={() =>
+                      toggleColumn(
+                        "status"
+                      )
+                    }
+                  >
+                    Status
+                  </DropdownMenuCheckboxItem>
+
+                  <DropdownMenuCheckboxItem
+                    checked={
+                      visibleColumns.created
+                    }
+                    onCheckedChange={() =>
+                      toggleColumn(
+                        "created"
+                      )
+                    }
+                  >
+                    Created
+                  </DropdownMenuCheckboxItem>
+
+                  <DropdownMenuCheckboxItem
+                    checked={
+                      visibleColumns.updated
+                    }
+                    onCheckedChange={() =>
+                      toggleColumn(
+                        "updated"
+                      )
+                    }
+                  >
+                    Updated
+                  </DropdownMenuCheckboxItem>
+
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
+
+            {/* ACTIVE FILTERS */}
+
+            {activeFilterLabels.length >
+              0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+
+                <span className="text-xs font-medium text-muted-foreground">
+                  Active filters:
+                </span>
+
+                {activeFilterLabels.map(
+                  (
+                    label
+                  ) => (
+                    <Badge
+                      key={
+                        label
+                      }
+                      variant="secondary"
+                      className="font-normal"
+                    >
+                      {label}
+                    </Badge>
+                  )
+                )}
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={
+                    clearAllFilters
+                  }
+                >
+                  Clear all
+                </Button>
+              </div>
+            )}
+
           </CardContent>
         </Card>
 
-        {/* ACTIVE FILTERS */}
-
-        {activeFilters.length > 0 && (
-          <div className="mb-4 flex flex-wrap gap-2">
-
-            {activeFilters.map(
-              (filter) => (
-                <Badge
-                  key={filter}
-                  variant="secondary"
-                >
-                  {filter}
-                </Badge>
-              )
-            )}
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setFilters(
-                  DEFAULT_FILTERS
-                );
-
-                setSearchInput("");
-                setPage(0);
-              }}
-            >
-              Clear
-            </Button>
-
-          </div>
-        )}
-
-        {/* TOOLBAR */}
-
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-
-          <p className="text-sm font-medium">
-            {totalElements.toLocaleString(
-              "en-IN"
-            )}{" "}
-            roles
-          </p>
-
-          <div className="flex flex-wrap items-center gap-2">
-
-            {/* COLUMNS */}
-
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                asChild
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                >
-                  <Columns3 className="mr-2 h-4 w-4" />
-                  Columns
-                </Button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent align="end">
-
-                {(
-                  Object.keys(
-                    DEFAULT_COLUMNS
-                  ) as Array<
-                    keyof VisibleColumns
-                  >
-                ).map((key) => (
-                  <DropdownMenuCheckboxItem
-                    key={key}
-                    checked={
-                      visibleColumns[key]
-                    }
-                    onCheckedChange={(
-                      checked
-                    ) =>
-                      setVisibleColumns(
-                        (current) => ({
-                          ...current,
-                          [key]: Boolean(
-                            checked
-                          ),
-                        })
-                      )
-                    }
-                  >
-                    {key
-                      .charAt(0)
-                      .toUpperCase() +
-                      key
-                        .slice(1)
-                        .replace(
-                          /([A-Z])/g,
-                          " $1"
-                        )}
-                  </DropdownMenuCheckboxItem>
-                ))}
-
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* VIEW */}
-
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                asChild
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                >
-                  {viewMode === "table" && (
-                    <Table2 className="mr-2 h-4 w-4" />
-                  )}
-
-                  {viewMode === "list" && (
-                    <List className="mr-2 h-4 w-4" />
-                  )}
-
-                  {viewMode === "card" && (
-                    <Grid2X2 className="mr-2 h-4 w-4" />
-                  )}
-
-                  View
-                </Button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent align="end">
-
-                <DropdownMenuItem
-                  onClick={() =>
-                    setViewMode("table")
-                  }
-                >
-                  <Table2 className="mr-2 h-4 w-4" />
-                  Table
-                </DropdownMenuItem>
-
-                <DropdownMenuItem
-                  onClick={() =>
-                    setViewMode("list")
-                  }
-                >
-                  <List className="mr-2 h-4 w-4" />
-                  List
-                </DropdownMenuItem>
-
-                <DropdownMenuItem
-                  onClick={() =>
-                    setViewMode("card")
-                  }
-                >
-                  <Grid2X2 className="mr-2 h-4 w-4" />
-                  Cards
-                </DropdownMenuItem>
-
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* DENSITY */}
-
-            <Select
-              value={density}
-              onValueChange={(
-                value
-              ) =>
-                setDensity(
-                  value as Density
-                )
-              }
-            >
-              <SelectTrigger className="w-[125px]">
-                <SelectValue />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value="comfortable">
-                  Comfortable
-                </SelectItem>
-
-                <SelectItem value="standard">
-                  Standard
-                </SelectItem>
-
-                <SelectItem value="compact">
-                  Compact
-                </SelectItem>
-              </SelectContent>
-            </Select>
-
-          </div>
-        </div>
-
-        {/* TABLE */}
-
-        {viewMode === "table" && (
-          <Card>
-
-            <CardContent className="p-0">
-
-              <div className="overflow-x-auto">
-
-                <Table>
-
-                  <TableHeader>
-                    <TableRow>
-
-                      {visibleColumns.role && (
-                        <TableHead>
-                          Role
-                        </TableHead>
-                      )}
-
-                      {visibleColumns.code && (
-                        <TableHead>
-                          Code
-                        </TableHead>
-                      )}
-
-                      {visibleColumns.scope && (
-                        <TableHead>
-                          Scope
-                        </TableHead>
-                      )}
-
-                      {visibleColumns.tenant && (
-                        <TableHead>
-                          Tenant
-                        </TableHead>
-                      )}
-
-                      {visibleColumns.organization && (
-                        <TableHead>
-                          Organization
-                        </TableHead>
-                      )}
-
-                      {visibleColumns.status && (
-                        <TableHead>
-                          Status
-                        </TableHead>
-                      )}
-
-                      {visibleColumns.created && (
-                        <TableHead>
-                          Created
-                        </TableHead>
-                      )}
-
-                      {visibleColumns.updated && (
-                        <TableHead>
-                          Updated
-                        </TableHead>
-                      )}
-
-                      <TableHead className="w-[60px]" />
-
-                    </TableRow>
-                  </TableHeader>
-
-                  <TableBody>
-
-                    {roles.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={9}
-                          className="h-32 text-center text-sm text-muted-foreground"
-                        >
-                          No roles found.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      roles.map(
-                        (role) => (
-                          <TableRow
-                            key={role.id}
-                            className={rowClass}
-                          >
-
-                            {visibleColumns.role && (
-                              <TableCell>
-
-                                <div className="flex items-center gap-3">
-
-                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                                    {getInitials(
-                                      role.roleName
-                                    )}
-                                  </div>
-
-                                  <div className="min-w-0">
-                                    <p className="truncate font-medium">
-                                      {role.roleName}
-                                    </p>
-
-                                    {role.description && (
-                                      <p className="max-w-[280px] truncate text-xs text-muted-foreground">
-                                        {role.description}
-                                      </p>
-                                    )}
-                                  </div>
-
-                                </div>
-
-                              </TableCell>
-                            )}
-
-                            {visibleColumns.code && (
-                              <TableCell>
-                                <span className="font-mono text-xs">
-                                  {role.roleCode}
-                                </span>
-                              </TableCell>
-                            )}
-
-                            {visibleColumns.scope && (
-                              <TableCell>
-                                <ScopeBadge
-                                  scopeType={
-                                    role.scopeType
-                                  }
-                                />
-                              </TableCell>
-                            )}
-
-                            {visibleColumns.tenant && (
-                              <TableCell>
-                                {role.scopeType ===
-                                "GLOBAL"
-                                  ? "-"
-                                  : role.tenantName ??
-                                    role.tenantId ??
-                                    "-"}
-                              </TableCell>
-                            )}
-
-                            {visibleColumns.organization && (
-                              <TableCell>
-                                {role.scopeType ===
-                                "GLOBAL"
-                                  ? "-"
-                                  : role.organizationName ??
-                                    role.organizationId ??
-                                    "-"}
-                              </TableCell>
-                            )}
-
-                            {visibleColumns.status && (
-                              <TableCell>
-                                <StatusBadge
-                                  active={
-                                    role.active
-                                  }
-                                  deleted={
-                                    role.deleted
-                                  }
-                                />
-                              </TableCell>
-                            )}
-
-                            {visibleColumns.created && (
-                              <TableCell>
-                                {formatDate(
-                                  role.createdAt
-                                )}
-                              </TableCell>
-                            )}
-
-                            {visibleColumns.updated && (
-                              <TableCell>
-                                {formatDate(
-                                  role.updatedAt
-                                )}
-                              </TableCell>
-                            )}
-
-                            <TableCell>
-                              <RoleActions
-                                role={role}
-                                onView={() =>
-                                  navigate(
-                                    `/roles/${role.id}`
-                                  )
-                                }
-                                onEdit={() =>
-                                  navigate(
-                                    `/roles/${role.id}/edit`
-                                  )
-                                }
-                                onDelete={() =>
-                                  handleDelete(
-                                    role
-                                  )
-                                }
-                                onRestore={() =>
-                                  handleRestore(
-                                    role
-                                  )
-                                }
-                              />
-                            </TableCell>
-
-                          </TableRow>
-                        )
-                      )
-                    )}
-
-                  </TableBody>
-
-                </Table>
-
-              </div>
-
-            </CardContent>
-
-          </Card>
-        )}
-
-        {/* LIST VIEW */}
-
-        {viewMode === "list" && (
-          <div className="space-y-2">
-
-            {roles.map((role) => (
-              <Card
-                key={role.id}
-                className="cursor-pointer transition-colors hover:bg-muted/40"
+        {/* =====================================================
+            ACTION ERROR
+        ===================================================== */}
+
+        {actionError && (
+          <Card className="mb-4 border-destructive/30">
+            <CardContent className="flex items-center justify-between p-4">
+              <p className="text-sm text-destructive">
+                {actionError}
+              </p>
+
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() =>
-                  navigate(
-                    `/roles/${role.id}`
+                  setActionError(
+                    ""
                   )
                 }
               >
-                <CardContent className="p-4">
+                <X className="h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        {/* =====================================================
+            TABLE VIEW
+        ===================================================== */}
 
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-semibold text-primary">
-                      {getInitials(
-                        role.roleName
-                      )}
+        {viewMode ===
+          "table" && (
+          <Card className="overflow-hidden">
+
+            <div className="w-full overflow-x-auto">
+
+              <Table>
+
+                <TableHeader>
+                  <TableRow>
+
+                    {visibleColumns.role && (
+                      <TableHead>
+                        <button
+                          type="button"
+                          className="flex items-center font-medium"
+                          onClick={() =>
+                            changeSort(
+                              "roleName"
+                            )
+                          }
+                        >
+                          Role
+                          <SortIcon field="roleName" />
+                        </button>
+                      </TableHead>
+                    )}
+
+                    {visibleColumns.code && (
+                      <TableHead>
+                        <button
+                          type="button"
+                          className="flex items-center font-medium"
+                          onClick={() =>
+                            changeSort(
+                              "roleCode"
+                            )
+                          }
+                        >
+                          Code
+                          <SortIcon field="roleCode" />
+                        </button>
+                      </TableHead>
+                    )}
+
+                    {visibleColumns.type && (
+                      <TableHead>
+                        Type
+                      </TableHead>
+                    )}
+
+                    {visibleColumns.organization && (
+                      <TableHead>
+                        Organization
+                      </TableHead>
+                    )}
+
+                    {visibleColumns.tenant && (
+                      <TableHead>
+                        Tenant
+                      </TableHead>
+                    )}
+
+                    {visibleColumns.systemRole && (
+                      <TableHead>
+                        System
+                      </TableHead>
+                    )}
+
+                    {visibleColumns.status && (
+                      <TableHead>
+                        Status
+                      </TableHead>
+                    )}
+
+                    {visibleColumns.created && (
+                      <TableHead>
+                        <button
+                          type="button"
+                          className="flex items-center font-medium"
+                          onClick={() =>
+                            changeSort(
+                              "createdAt"
+                            )
+                          }
+                        >
+                          Created
+                          <SortIcon field="createdAt" />
+                        </button>
+                      </TableHead>
+                    )}
+
+                    {visibleColumns.updated && (
+                      <TableHead>
+                        <button
+                          type="button"
+                          className="flex items-center font-medium"
+                          onClick={() =>
+                            changeSort(
+                              "updatedAt"
+                            )
+                          }
+                        >
+                          Updated
+                          <SortIcon field="updatedAt" />
+                        </button>
+                      </TableHead>
+                    )}
+
+                    <TableHead className="w-[60px]" />
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+
+                  {paginatedRoles.length ===
+                    0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={10}
+                        className="h-40 text-center"
+                      >
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <ShieldCheck className="h-8 w-8 text-muted-foreground/50" />
+
+                          <p className="font-medium">
+                            No roles found
+                          </p>
+
+                          <p className="text-sm text-muted-foreground">
+                            Try changing your search or filters.
+                          </p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+
+                  {paginatedRoles.map(
+                    (role) => (
+                      <TableRow
+                        key={
+                          role.id
+                        }
+                        className={
+                          rowClass
+                        }
+                      >
+
+                        {visibleColumns.role && (
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
+                                {getInitials(
+                                  role.roleName
+                                )}
+                              </div>
+
+                              <div className="min-w-0">
+                                <button
+                                  type="button"
+                                  className="truncate text-left font-medium hover:underline"
+                                  onClick={() =>
+                                    handleView(
+                                      role
+                                    )
+                                  }
+                                >
+                                  {
+                                    role.roleName
+                                  }
+                                </button>
+
+                                <p className="max-w-[300px] truncate text-xs text-muted-foreground">
+                                  {role.description ??
+                                    "No description"}
+                                </p>
+                              </div>
+
+                            </div>
+                          </TableCell>
+                        )}
+
+                        {visibleColumns.code && (
+                          <TableCell>
+                            <code className="rounded bg-muted px-2 py-1 text-xs">
+                              {
+                                role.roleCode
+                              }
+                            </code>
+                          </TableCell>
+                        )}
+
+                        {visibleColumns.type && (
+                          <TableCell>
+                            <RoleTypeBadge
+                              roleType={
+                                role.roleType
+                              }
+                            />
+                          </TableCell>
+                        )}
+
+                        {visibleColumns.organization && (
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+
+                              <Building2 className="h-4 w-4 text-muted-foreground" />
+
+                              <span className="max-w-[220px] truncate">
+                                {getOrganizationName(
+                                  role.organizationId,
+                                  organizations
+                                )}
+                              </span>
+
+                            </div>
+                          </TableCell>
+                        )}
+
+                        {visibleColumns.tenant && (
+                          <TableCell>
+                            {getTenantName(
+                              role.organizationId,
+                              organizations,
+                              tenants
+                            )}
+                          </TableCell>
+                        )}
+
+                        {visibleColumns.systemRole && (
+                          <TableCell>
+                            <SystemRoleBadge
+                              systemRole={
+                                role.systemRole
+                              }
+                            />
+                          </TableCell>
+                        )}
+
+                        {visibleColumns.status && (
+                          <TableCell>
+                            <StatusBadge
+                              active={
+                                role.active
+                              }
+                              deleted={
+                                role.deleted
+                              }
+                            />
+                          </TableCell>
+                        )}
+
+                        {visibleColumns.created && (
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {formatDate(
+                              role.createdAt
+                            )}
+                          </TableCell>
+                        )}
+
+                        {visibleColumns.updated && (
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {formatDate(
+                              role.updatedAt
+                            )}
+                          </TableCell>
+                        )}
+
+                        <TableCell>
+                          <RoleActions
+                            role={
+                              role
+                            }
+                            onView={() =>
+                              handleView(
+                                role
+                              )
+                            }
+                            onEdit={() =>
+                              navigate(
+                                `/roles/${role.id}/edit`
+                              )
+                            }
+                            onDelete={() =>
+                              handleDelete(
+                                role
+                              )
+                            }
+                          />
+                        </TableCell>
+
+                      </TableRow>
+                    )
+                  )}
+
+                </TableBody>
+
+              </Table>
+
+            </div>
+          </Card>
+        )}
+
+        {/* =====================================================
+            LIST VIEW
+        ===================================================== */}
+
+        {viewMode ===
+          "list" && (
+          <div className="space-y-3">
+
+            {paginatedRoles.length ===
+              0 && (
+              <Card>
+                <CardContent className="flex min-h-40 flex-col items-center justify-center gap-2">
+                  <ShieldCheck className="h-8 w-8 text-muted-foreground/50" />
+
+                  <p className="font-medium">
+                    No roles found
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Try changing your filters.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {paginatedRoles.map(
+              (role) => (
+                <Card
+                  key={
+                    role.id
+                  }
+                >
+                  <CardContent
+                    className={
+                      cardPadding
+                    }
+                  >
+
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-semibold text-primary">
+                          {getInitials(
+                            role.roleName
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+
+                          <button
+                            type="button"
+                            className="truncate font-medium hover:underline"
+                            onClick={() =>
+                              handleView(
+                                role
+                              )
+                            }
+                          >
+                            {
+                              role.roleName
+                            }
+                          </button>
+
+                          <p className="text-xs text-muted-foreground">
+                            {
+                              role.roleCode
+                            }
+                          </p>
+
+                        </div>
+
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+
+                        <RoleTypeBadge
+                          roleType={
+                            role.roleType
+                          }
+                        />
+
+                        <SystemRoleBadge
+                          systemRole={
+                            role.systemRole
+                          }
+                        />
+
+                        <StatusBadge
+                          active={
+                            role.active
+                          }
+                          deleted={
+                            role.deleted
+                          }
+                        />
+
+                      </div>
+
+                      <div className="flex min-w-[180px] items-center gap-2 text-sm text-muted-foreground">
+
+                        <Building2 className="h-4 w-4" />
+
+                        <span className="truncate">
+                          {getOrganizationName(
+                            role.organizationId,
+                            organizations
+                          )}
+                        </span>
+
+                      </div>
+
+                      <div className="text-sm text-muted-foreground">
+                        {formatDate(
+                          role.createdAt
+                        )}
+                      </div>
+
+                      <RoleActions
+                        role={
+                          role
+                        }
+                        onView={() =>
+                          handleView(
+                            role
+                          )
+                        }
+                        onEdit={() =>
+                          navigate(
+                            `/roles/${role.id}/edit`
+                          )
+                        }
+                        onDelete={() =>
+                          handleDelete(
+                            role
+                          )
+                        }
+                      />
+
                     </div>
 
-                    <div className="min-w-0 flex-1">
+                  </CardContent>
+                </Card>
+              )
+            )}
 
-                      <p className="font-medium">
-                        {role.roleName}
-                      </p>
+          </div>
+        )}
 
-                      <p className="font-mono text-xs text-muted-foreground">
-                        {role.roleCode}
-                      </p>
+        {/* =====================================================
+            CARD VIEW
+        ===================================================== */}
+
+        {viewMode ===
+          "card" && (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+
+            {paginatedRoles.length ===
+              0 && (
+              <Card className="md:col-span-2 xl:col-span-3">
+                <CardContent className="flex min-h-40 flex-col items-center justify-center gap-2">
+                  <ShieldCheck className="h-8 w-8 text-muted-foreground/50" />
+
+                  <p className="font-medium">
+                    No roles found
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Try changing your filters.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {paginatedRoles.map(
+              (role) => (
+                <Card
+                  key={
+                    role.id
+                  }
+                  className="transition-shadow hover:shadow-md"
+                >
+
+                  <CardHeader className="pb-3">
+
+                    <div className="flex items-start justify-between gap-3">
+
+                      <div className="flex min-w-0 items-center gap-3">
+
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-semibold text-primary">
+                          {getInitials(
+                            role.roleName
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+
+                          <button
+                            type="button"
+                            className="truncate text-left font-semibold hover:underline"
+                            onClick={() =>
+                              handleView(
+                                role
+                              )
+                            }
+                          >
+                            {
+                              role.roleName
+                            }
+                          </button>
+
+                          <code className="text-xs text-muted-foreground">
+                            {
+                              role.roleCode
+                            }
+                          </code>
+
+                        </div>
+
+                      </div>
+
+                      <RoleActions
+                        role={
+                          role
+                        }
+                        onView={() =>
+                          handleView(
+                            role
+                          )
+                        }
+                        onEdit={() =>
+                          navigate(
+                            `/roles/${role.id}/edit`
+                          )
+                        }
+                        onDelete={() =>
+                          handleDelete(
+                            role
+                          )
+                        }
+                      />
 
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                  </CardHeader>
 
-                      <ScopeBadge
-                        scopeType={
-                          role.scopeType
+                  <CardContent className="space-y-4">
+
+                    <p className="min-h-[40px] text-sm text-muted-foreground">
+                      {role.description ??
+                        "No description provided."}
+                    </p>
+
+                    <div className="flex flex-wrap gap-2">
+
+                      <RoleTypeBadge
+                        roleType={
+                          role.roleType
+                        }
+                      />
+
+                      <SystemRoleBadge
+                        systemRole={
+                          role.systemRole
                         }
                       />
 
@@ -1574,176 +2949,100 @@ export default function RolesPage() {
 
                     </div>
 
-                    <RoleActions
-                      role={role}
-                      onView={() =>
-                        navigate(
-                          `/roles/${role.id}`
-                        )
-                      }
-                      onEdit={() =>
-                        navigate(
-                          `/roles/${role.id}/edit`
-                        )
-                      }
-                      onDelete={() =>
-                        handleDelete(
-                          role
-                        )
-                      }
-                      onRestore={() =>
-                        handleRestore(
-                          role
-                        )
-                      }
-                    />
+                    <div className="space-y-2 border-t pt-3">
 
-                  </div>
+                      <div className="flex items-center justify-between gap-3 text-sm">
 
-                </CardContent>
-              </Card>
-            ))}
+                        <span className="text-muted-foreground">
+                          Organization
+                        </span>
+
+                        <span className="max-w-[180px] truncate font-medium">
+                          {getOrganizationName(
+                            role.organizationId,
+                            organizations
+                          )}
+                        </span>
+
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3 text-sm">
+
+                        <span className="text-muted-foreground">
+                          Tenant
+                        </span>
+
+                        <span className="max-w-[180px] truncate font-medium">
+                          {getTenantName(
+                            role.organizationId,
+                            organizations,
+                            tenants
+                          )}
+                        </span>
+
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3 text-sm">
+
+                        <span className="text-muted-foreground">
+                          Created
+                        </span>
+
+                        <span>
+                          {formatDate(
+                            role.createdAt
+                          )}
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                  </CardContent>
+                </Card>
+              )
+            )}
 
           </div>
         )}
 
-        {/* CARD VIEW */}
-
-        {viewMode === "card" && (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-
-            {roles.map((role) => (
-              <Card
-                key={role.id}
-                className="cursor-pointer transition-colors hover:bg-muted/40"
-                onClick={() =>
-                  navigate(
-                    `/roles/${role.id}`
-                  )
-                }
-              >
-
-                <CardContent className="p-5">
-
-                  <div className="mb-4 flex items-start justify-between">
-
-                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 font-semibold text-primary">
-                      {getInitials(
-                        role.roleName
-                      )}
-                    </div>
-
-                    <RoleActions
-                      role={role}
-                      onView={() =>
-                        navigate(
-                          `/roles/${role.id}`
-                        )
-                      }
-                      onEdit={() =>
-                        navigate(
-                          `/roles/${role.id}/edit`
-                        )
-                      }
-                      onDelete={() =>
-                        handleDelete(
-                          role
-                        )
-                      }
-                      onRestore={() =>
-                        handleRestore(
-                          role
-                        )
-                      }
-                    />
-
-                  </div>
-
-                  <h3 className="font-semibold">
-                    {role.roleName}
-                  </h3>
-
-                  <p className="mt-1 font-mono text-xs text-muted-foreground">
-                    {role.roleCode}
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-
-                    <ScopeBadge
-                      scopeType={
-                        role.scopeType
-                      }
-                    />
-
-                    <StatusBadge
-                      active={
-                        role.active
-                      }
-                      deleted={
-                        role.deleted
-                      }
-                    />
-
-                  </div>
-
-                  <div className="mt-5 space-y-3 border-t pt-4">
-
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        Tenant
-                      </p>
-
-                      <p className="text-sm">
-                        {role.scopeType ===
-                        "GLOBAL"
-                          ? "Global"
-                          : role.tenantName ??
-                            "-"}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        Organization
-                      </p>
-
-                      <p className="text-sm">
-                        {role.scopeType ===
-                        "GLOBAL"
-                          ? "Global"
-                          : role.organizationName ??
-                            "-"}
-                      </p>
-                    </div>
-
-                  </div>
-
-                </CardContent>
-              </Card>
-            ))}
-
-          </div>
-        )}
-
-        {/* PAGINATION */}
+        {/* =====================================================
+            PAGINATION
+        ===================================================== */}
 
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
-          <p className="text-sm text-muted-foreground">
-            Page {totalPages === 0
-              ? 0
-              : page + 1}{" "}
-            of {totalPages}
-          </p>
+          <div className="text-sm text-muted-foreground">
+            Showing{" "}
+            <span className="font-medium text-foreground">
+              {startItem}
+            </span>{" "}
+            to{" "}
+            <span className="font-medium text-foreground">
+              {endItem}
+            </span>{" "}
+            of{" "}
+            <span className="font-medium text-foreground">
+              {totalElements}
+            </span>{" "}
+            roles
+          </div>
 
           <div className="flex items-center gap-2">
 
             <Select
-              value={String(pageSize)}
-              onValueChange={(value) => {
+              value={String(
+                pageSize
+              )}
+              onValueChange={(
+                value
+              ) => {
                 setPageSize(
-                  Number(value)
+                  Number(
+                    value
+                  )
                 );
+
                 setPage(0);
               }}
             >
@@ -1752,6 +3051,7 @@ export default function RolesPage() {
               </SelectTrigger>
 
               <SelectContent>
+
                 <SelectItem value="10">
                   10 / page
                 </SelectItem>
@@ -1767,18 +3067,24 @@ export default function RolesPage() {
                 <SelectItem value="100">
                   100 / page
                 </SelectItem>
+
               </SelectContent>
             </Select>
 
             <Button
               variant="outline"
               size="icon"
-              disabled={page === 0}
+              disabled={
+                safePage === 0
+              }
               onClick={() =>
                 setPage(
-                  (current) =>
+                  (
+                    current
+                  ) =>
                     Math.max(
-                      current - 1,
+                      current -
+                        1,
                       0
                     )
                 )
@@ -1787,22 +3093,34 @@ export default function RolesPage() {
               <ChevronLeft className="h-4 w-4" />
             </Button>
 
+            <div className="min-w-[80px] text-center text-sm">
+              Page{" "}
+              <span className="font-medium">
+                {safePage + 1}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium">
+                {totalPages}
+              </span>
+            </div>
+
             <Button
               variant="outline"
               size="icon"
               disabled={
-                page >=
+                safePage >=
                 totalPages - 1
               }
               onClick={() =>
                 setPage(
-                  (current) =>
+                  (
+                    current
+                  ) =>
                     Math.min(
-                      current + 1,
-                      Math.max(
-                        totalPages - 1,
-                        0
-                      )
+                      current +
+                        1,
+                      totalPages -
+                        1
                     )
                 )
               }
@@ -1815,7 +3133,9 @@ export default function RolesPage() {
 
       </div>
 
-      {/* FILTER SHEET */}
+      {/* =======================================================
+          FILTER SHEET
+      ======================================================= */}
 
       <Sheet
         open={filterOpen}
@@ -1824,9 +3144,7 @@ export default function RolesPage() {
         }
       >
 
-        <SheetContent
-          className="w-full sm:max-w-md overflow-y-auto"
-        >
+        <SheetContent className="w-full overflow-y-auto sm:max-w-md">
 
           <SheetHeader>
             <SheetTitle>
@@ -1834,11 +3152,11 @@ export default function RolesPage() {
             </SheetTitle>
 
             <SheetDescription>
-              Filter roles by scope, tenant, organization and status.
+              Filter roles by scope, tenant, organization, status and dates.
             </SheetDescription>
           </SheetHeader>
 
-          <div className="space-y-5 py-6">
+          <div className="mt-6 space-y-5">
 
             {/* ROLE NAME */}
 
@@ -1851,16 +3169,22 @@ export default function RolesPage() {
                 value={
                   draftFilters.roleName
                 }
-                onChange={(event) =>
+                onChange={(
+                  event
+                ) =>
                   setDraftFilters(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
                       roleName:
-                        event.target.value,
+                        event
+                          .target
+                          .value,
                     })
                   )
                 }
-                placeholder="Search role name"
+                placeholder="e.g. HR Admin"
               />
             </div>
 
@@ -1875,53 +3199,63 @@ export default function RolesPage() {
                 value={
                   draftFilters.roleCode
                 }
-                onChange={(event) =>
+                onChange={(
+                  event
+                ) =>
                   setDraftFilters(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
                       roleCode:
-                        event.target.value,
+                        event
+                          .target
+                          .value,
                     })
                   )
                 }
-                placeholder="MANUFACTURER_ADMIN"
+                placeholder="e.g. HR_ADMIN"
               />
             </div>
 
-            {/* SCOPE */}
+            {/* ROLE TYPE */}
 
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                Scope
+                Role Type
               </label>
 
               <Select
                 value={
-                  draftFilters.scopeType ||
+                  draftFilters.roleType ||
                   "ALL"
                 }
-                onValueChange={(value) =>
+                onValueChange={(
+                  value
+                ) =>
                   setDraftFilters(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
-                      scopeType:
-                        value === "ALL"
+                      roleType:
+                        value ===
+                        "ALL"
                           ? ""
-                          : value,
-                      tenantId: "",
-                      organizationId:
-                        "",
+                          : (value as RoleType),
                     })
                   )
                 }
               >
+
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select role type" />
                 </SelectTrigger>
 
                 <SelectContent>
+
                   <SelectItem value="ALL">
-                    All scopes
+                    All Role Types
                   </SelectItem>
 
                   <SelectItem value="GLOBAL">
@@ -1929,9 +3263,11 @@ export default function RolesPage() {
                   </SelectItem>
 
                   <SelectItem value="TENANT">
-                    Tenant Specific
+                    Tenant
                   </SelectItem>
+
                 </SelectContent>
+
               </Select>
             </div>
 
@@ -1947,46 +3283,72 @@ export default function RolesPage() {
                   draftFilters.tenantId ||
                   "ALL"
                 }
-                onValueChange={(value) =>
+                onValueChange={(
+                  value
+                ) =>
                   setDraftFilters(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
                       tenantId:
-                        value === "ALL"
+                        value ===
+                        "ALL"
                           ? ""
                           : value,
+
+                      /*
+                       * Organization belongs to
+                       * a tenant. Clear organization
+                       * when tenant changes to avoid
+                       * inconsistent filters.
+                       */
                       organizationId:
                         "",
                     })
                   )
                 }
-                disabled={
-                  draftFilters.scopeType ===
-                  "GLOBAL"
-                }
               >
+
                 <SelectTrigger>
                   <SelectValue placeholder="Select tenant" />
                 </SelectTrigger>
 
                 <SelectContent>
+
                   <SelectItem value="ALL">
-                    All tenants
+                    All Tenants
                   </SelectItem>
 
                   {tenants.map(
-                    (tenant) => (
+                    (
+                      tenant
+                    ) => (
                       <SelectItem
-                        key={tenant.id}
-                        value={tenant.id}
+                        key={
+                          tenant.id
+                        }
+                        value={
+                          tenant.id
+                        }
                       >
                         {tenant.tenantName ??
-                          tenant.name}
+                          tenant.name ??
+                          tenant.id}
                       </SelectItem>
                     )
                   )}
+
                 </SelectContent>
+
               </Select>
+
+              {tenants.length ===
+                0 && (
+                <p className="text-xs text-muted-foreground">
+                  Tenant data is not available from the tenant API. Tenant filtering will use organization tenantId when available.
+                </p>
+              )}
             </div>
 
             {/* ORGANIZATION */}
@@ -2001,44 +3363,122 @@ export default function RolesPage() {
                   draftFilters.organizationId ||
                   "ALL"
                 }
-                onValueChange={(value) =>
+                onValueChange={(
+                  value
+                ) =>
                   setDraftFilters(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
                       organizationId:
-                        value === "ALL"
+                        value ===
+                        "ALL"
                           ? ""
                           : value,
                     })
                   )
                 }
-                disabled={
-                  !draftFilters.tenantId
-                }
               >
+
                 <SelectTrigger>
                   <SelectValue placeholder="Select organization" />
                 </SelectTrigger>
 
                 <SelectContent>
+
                   <SelectItem value="ALL">
-                    All organizations
+                    All Organizations
                   </SelectItem>
 
-                  {filterOrganizations.map(
-                    (organization) => (
-                      <SelectItem
-                        key={organization.id}
-                        value={
-                          organization.id
+                  {organizations
+                    .filter(
+                      (
+                        organization
+                      ) => {
+                        if (
+                          !draftFilters.tenantId
+                        ) {
+                          return true;
                         }
-                      >
-                        {organization.orgName ??
-                          organization.name}
-                      </SelectItem>
+
+                        return (
+                          organization.tenantId ===
+                            draftFilters.tenantId ||
+                          !organization.tenantId
+                        );
+                      }
                     )
-                  )}
+                    .map(
+                      (
+                        organization
+                      ) => (
+                        <SelectItem
+                          key={
+                            organization.id
+                          }
+                          value={
+                            organization.id
+                          }
+                        >
+                          {organization.orgName ??
+                            organization.name ??
+                            organization.id}
+                        </SelectItem>
+                      )
+                    )}
+
                 </SelectContent>
+
+              </Select>
+            </div>
+
+            {/* SYSTEM ROLE */}
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Role Category
+              </label>
+
+              <Select
+                value={
+                  draftFilters.systemRole
+                }
+                onValueChange={(
+                  value
+                ) =>
+                  setDraftFilters(
+                    (
+                      current
+                    ) => ({
+                      ...current,
+                      systemRole:
+                        value as RoleFilters["systemRole"],
+                    })
+                  )
+                }
+              >
+
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+
+                <SelectContent>
+
+                  <SelectItem value="ALL">
+                    All Roles
+                  </SelectItem>
+
+                  <SelectItem value="SYSTEM">
+                    System Roles
+                  </SelectItem>
+
+                  <SelectItem value="CUSTOM">
+                    Custom Roles
+                  </SelectItem>
+
+                </SelectContent>
+
               </Select>
             </div>
 
@@ -2053,9 +3493,13 @@ export default function RolesPage() {
                 value={
                   draftFilters.status
                 }
-                onValueChange={(value) =>
+                onValueChange={(
+                  value
+                ) =>
                   setDraftFilters(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
                       status:
                         value as RoleFilters["status"],
@@ -2063,11 +3507,13 @@ export default function RolesPage() {
                   )
                 }
               >
+
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
 
                 <SelectContent>
+
                   <SelectItem value="ACTIVE">
                     Active
                   </SelectItem>
@@ -2076,33 +3522,161 @@ export default function RolesPage() {
                     Inactive
                   </SelectItem>
 
-                  <SelectItem value="DELETED">
-                    Deleted
-                  </SelectItem>
-
                   <SelectItem value="ALL">
                     All
                   </SelectItem>
+
                 </SelectContent>
+
               </Select>
+            </div>
+
+            {/* CREATED DATE */}
+
+            <div className="space-y-3">
+
+              <label className="text-sm font-medium">
+                Created Date
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">
+                    From
+                  </label>
+
+                  <Input
+                    type="date"
+                    value={
+                      draftFilters.createdFrom
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setDraftFilters(
+                        (
+                          current
+                        ) => ({
+                          ...current,
+                          createdFrom:
+                            event
+                              .target
+                              .value,
+                        })
+                      )
+                    }
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">
+                    To
+                  </label>
+
+                  <Input
+                    type="date"
+                    value={
+                      draftFilters.createdTo
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setDraftFilters(
+                        (
+                          current
+                        ) => ({
+                          ...current,
+                          createdTo:
+                            event
+                              .target
+                              .value,
+                        })
+                      )
+                    }
+                  />
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* UPDATED DATE */}
+
+            <div className="space-y-3">
+
+              <label className="text-sm font-medium">
+                Updated Date
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">
+                    From
+                  </label>
+
+                  <Input
+                    type="date"
+                    value={
+                      draftFilters.updatedFrom
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setDraftFilters(
+                        (
+                          current
+                        ) => ({
+                          ...current,
+                          updatedFrom:
+                            event
+                              .target
+                              .value,
+                        })
+                      )
+                    }
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">
+                    To
+                  </label>
+
+                  <Input
+                    type="date"
+                    value={
+                      draftFilters.updatedTo
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setDraftFilters(
+                        (
+                          current
+                        ) => ({
+                          ...current,
+                          updatedTo:
+                            event
+                              .target
+                              .value,
+                        })
+                      )
+                    }
+                  />
+                </div>
+
+              </div>
+
             </div>
 
           </div>
 
-          <SheetFooter className="gap-2 sm:flex-col">
-
-            <Button
-              className="w-full"
-              onClick={
-                applyFilters
-              }
-            >
-              Apply Filters
-            </Button>
+          <SheetFooter className="mt-8">
 
             <Button
               variant="outline"
-              className="w-full"
               onClick={
                 resetFilters
               }
@@ -2110,7 +3684,254 @@ export default function RolesPage() {
               Reset
             </Button>
 
+            <Button
+              onClick={
+                applyFilters
+              }
+            >
+              Apply Filters
+            </Button>
+
           </SheetFooter>
+
+        </SheetContent>
+
+      </Sheet>
+
+      {/* =======================================================
+          VIEW ROLE SHEET
+      ======================================================= */}
+
+      <Sheet
+        open={viewOpen}
+        onOpenChange={
+          setViewOpen
+        }
+      >
+
+        <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+
+          <SheetHeader>
+
+            <SheetTitle>
+              Role Details
+            </SheetTitle>
+
+            <SheetDescription>
+              View role configuration and scope information.
+            </SheetDescription>
+
+          </SheetHeader>
+
+          {selectedRole && (
+            <div className="mt-6 space-y-6">
+
+              {/* ROLE HEADER */}
+
+              <div className="flex items-center gap-4">
+
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-lg font-semibold text-primary">
+                  {getInitials(
+                    selectedRole.roleName
+                  )}
+                </div>
+
+                <div className="min-w-0">
+
+                  <h2 className="truncate text-xl font-semibold">
+                    {
+                      selectedRole.roleName
+                    }
+                  </h2>
+
+                  <code className="text-sm text-muted-foreground">
+                    {
+                      selectedRole.roleCode
+                    }
+                  </code>
+
+                </div>
+
+              </div>
+
+              {/* BADGES */}
+
+              <div className="flex flex-wrap gap-2">
+
+                <RoleTypeBadge
+                  roleType={
+                    selectedRole.roleType
+                  }
+                />
+
+                <SystemRoleBadge
+                  systemRole={
+                    selectedRole.systemRole
+                  }
+                />
+
+                <StatusBadge
+                  active={
+                    selectedRole.active
+                  }
+                  deleted={
+                    selectedRole.deleted
+                  }
+                />
+
+              </div>
+
+              {/* DESCRIPTION */}
+
+              <div className="space-y-2">
+
+                <h3 className="text-sm font-medium">
+                  Description
+                </h3>
+
+                <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
+                  {selectedRole.description ??
+                    "No description provided."}
+                </div>
+
+              </div>
+
+              {/* SCOPE */}
+
+              <div className="space-y-3">
+
+                <h3 className="text-sm font-medium">
+                  Scope
+                </h3>
+
+                <div className="rounded-lg border">
+
+                  <div className="flex items-center justify-between border-b p-3">
+                    <span className="text-sm text-muted-foreground">
+                      Role Type
+                    </span>
+
+                    <RoleTypeBadge
+                      roleType={
+                        selectedRole.roleType
+                      }
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between border-b p-3">
+
+                    <span className="text-sm text-muted-foreground">
+                      Organization
+                    </span>
+
+                    <span className="max-w-[220px] truncate text-right text-sm font-medium">
+                      {getOrganizationName(
+                        selectedRole.organizationId,
+                        organizations
+                      )}
+                    </span>
+
+                  </div>
+
+                  <div className="flex items-center justify-between p-3">
+
+                    <span className="text-sm text-muted-foreground">
+                      Tenant
+                    </span>
+
+                    <span className="max-w-[220px] truncate text-right text-sm font-medium">
+                      {getTenantName(
+                        selectedRole.organizationId,
+                        organizations,
+                        tenants
+                      )}
+                    </span>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* AUDIT */}
+
+              <div className="space-y-3">
+
+                <h3 className="text-sm font-medium">
+                  Audit Information
+                </h3>
+
+                <div className="rounded-lg border">
+
+                  <div className="flex items-center justify-between border-b p-3">
+
+                    <span className="text-sm text-muted-foreground">
+                      Created
+                    </span>
+
+                    <span className="text-right text-sm">
+                      {formatDateTime(
+                        selectedRole.createdAt
+                      )}
+                    </span>
+
+                  </div>
+
+                  <div className="flex items-center justify-between border-b p-3">
+
+                    <span className="text-sm text-muted-foreground">
+                      Updated
+                    </span>
+
+                    <span className="text-right text-sm">
+                      {formatDateTime(
+                        selectedRole.updatedAt
+                      )}
+                    </span>
+
+                  </div>
+
+                  <div className="flex items-center justify-between p-3">
+
+                    <span className="text-sm text-muted-foreground">
+                      Role ID
+                    </span>
+
+                    <code className="max-w-[230px] truncate text-xs">
+                      {
+                        selectedRole.id
+                      }
+                    </code>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* EDIT */}
+
+              {!selectedRole.systemRole &&
+                !selectedRole.deleted && (
+                  <Button
+                    className="w-full"
+                    onClick={() => {
+                      setViewOpen(
+                        false
+                      );
+
+                      navigate(
+                        `/roles/${selectedRole.id}/edit`
+                      );
+                    }}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit Role
+                  </Button>
+                )}
+
+            </div>
+          )}
 
         </SheetContent>
 

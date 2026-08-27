@@ -2,14 +2,17 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+
 import {
   ArrowLeft,
   Building2,
   Globe2,
+  Info,
   Loader2,
   Save,
-  Server,
+  ShieldCheck,
 } from "lucide-react";
+
 import { useNavigate } from "react-router-dom";
 
 import api from "@/api/api";
@@ -46,36 +49,28 @@ import { Textarea } from "@/components/ui/textarea";
    TYPES
 ============================================================ */
 
-interface Tenant {
-  id: string;
-  tenantName?: string;
-  name?: string;
-  active?: boolean;
-  deleted?: boolean;
-}
+type RoleType = "GLOBAL" | "TENANT";
 
 interface Organization {
   id: string;
   orgName?: string;
-  name?: string;
-  tenantId?: string;
   active?: boolean;
   deleted?: boolean;
+}
+
+interface RoleFormValues {
+  roleType: RoleType | "";
+  organizationId: string;
+  roleName: string;
+  roleCode: string;
+  description: string;
+  systemRole: boolean;
+  active: boolean;
 }
 
 interface ApiErrorResponse {
   message?: string;
   error?: string;
-}
-
-interface RoleFormValues {
-  roleName: string;
-  roleCode: string;
-  description: string;
-  scopeType: "GLOBAL" | "TENANT";
-  tenantId: string;
-  organizationId: string;
-  active: boolean;
 }
 
 /* ============================================================
@@ -84,17 +79,35 @@ interface RoleFormValues {
 
 const roleSchema = z
   .object({
+    roleType: z
+      .string()
+      .min(1, "Role type is required"),
+
+    organizationId: z.string(),
+
     roleName: z
       .string()
       .trim()
-      .min(2, "Role name must be at least 2 characters")
-      .max(255, "Role name cannot exceed 255 characters"),
+      .min(
+        2,
+        "Role name must be at least 2 characters"
+      )
+      .max(
+        100,
+        "Role name cannot exceed 100 characters"
+      ),
 
     roleCode: z
       .string()
       .trim()
-      .min(2, "Role code is required")
-      .max(100, "Role code cannot exceed 100 characters")
+      .min(
+        1,
+        "Role code is required"
+      )
+      .max(
+        50,
+        "Role code cannot exceed 50 characters"
+      )
       .regex(
         /^[A-Za-z0-9_-]+$/,
         "Role code can contain only letters, numbers, _ and -"
@@ -102,33 +115,44 @@ const roleSchema = z
 
     description: z
       .string()
-      .max(1000, "Description cannot exceed 1000 characters"),
+      .max(
+        500,
+        "Description cannot exceed 500 characters"
+      ),
 
-    scopeType: z.enum(["GLOBAL", "TENANT"]),
-
-    tenantId: z.string(),
-
-    organizationId: z.string(),
+    systemRole: z.boolean(),
 
     active: z.boolean(),
   })
-  .superRefine((values, context) => {
-    if (values.scopeType === "TENANT") {
-      if (!values.tenantId) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["tenantId"],
-          message: "Tenant is required for tenant-scoped roles",
-        });
-      }
+  .superRefine((values, ctx) => {
+    /*
+     * TENANT roles must belong to an organization.
+     */
+    if (
+      values.roleType === "TENANT" &&
+      !values.organizationId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["organizationId"],
+        message:
+          "Organization is required for Tenant Role",
+      });
+    }
 
-      if (!values.organizationId) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["organizationId"],
-          message: "Organization is required for tenant-scoped roles",
-        });
-      }
+    /*
+     * GLOBAL roles cannot belong to an organization.
+     */
+    if (
+      values.roleType === "GLOBAL" &&
+      values.organizationId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["organizationId"],
+        message:
+          "Global roles cannot belong to an organization",
+      });
     }
   });
 
@@ -136,22 +160,22 @@ const roleSchema = z
    API
 ============================================================ */
 
-async function fetchTenants(): Promise<Tenant[]> {
-  const response = await api.get("/api/v1/tenants?size=100");
-
-  const data = response.data?.data ?? response.data;
-
-  return data?.content ?? data ?? [];
-}
-
-async function fetchOrganizations(): Promise<Organization[]> {
+async function fetchOrganizations(): Promise<
+  Organization[]
+> {
   const response = await api.get(
     "/api/v1/organizations?size=100"
   );
 
-  const data = response.data?.data ?? response.data;
+  const data =
+    response.data?.data ??
+    response.data;
 
-  return data?.content ?? data ?? [];
+  return (
+    data?.content ??
+    data ??
+    []
+  );
 }
 
 /* ============================================================
@@ -161,100 +185,136 @@ async function fetchOrganizations(): Promise<Organization[]> {
 export default function AddRolesPage() {
   const navigate = useNavigate();
 
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [organizations, setOrganizations] = useState<Organization[]>(
-    []
-  );
+  const [
+    organizations,
+    setOrganizations,
+  ] = useState<Organization[]>([]);
 
-  const [isLoadingData, setIsLoadingData] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
+  const [
+    isLoadingOrganizations,
+    setIsLoadingOrganizations,
+  ] = useState<boolean>(true);
 
-  const form = useForm<RoleFormValues>({
-    resolver: zodResolver(roleSchema),
+  const [
+    isSubmitting,
+    setIsSubmitting,
+  ] = useState<boolean>(false);
 
-    defaultValues: {
-      roleName: "",
-      roleCode: "",
-      description: "",
-      scopeType: "GLOBAL",
-      tenantId: "",
-      organizationId: "",
-      active: true,
-    },
-
-    mode: "onBlur",
-    reValidateMode: "onChange",
-  });
-
-  const scopeType = form.watch("scopeType");
-  const tenantId = form.watch("tenantId");
+  const [
+    submitError,
+    setSubmitError,
+  ] = useState<string>("");
 
   /* ==========================================================
-     LOAD TENANTS + ORGANIZATIONS
+     FORM
+  ========================================================== */
+
+  const form =
+    useForm<RoleFormValues>({
+      resolver:
+        zodResolver(roleSchema),
+
+      defaultValues: {
+        roleType: "",
+        organizationId: "",
+        roleName: "",
+        roleCode: "",
+        description: "",
+        systemRole: false,
+        active: true,
+      },
+
+      mode: "onBlur",
+
+      reValidateMode: "onChange",
+    });
+
+  const selectedRoleType =
+    form.watch("roleType");
+
+  const selectedOrganizationId =
+    form.watch("organizationId");
+
+  /* ==========================================================
+     LOAD ORGANIZATIONS
   ========================================================== */
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoadingData(true);
+    const loadOrganizations =
+      async (): Promise<void> => {
+        try {
+          setIsLoadingOrganizations(true);
+          setSubmitError("");
 
-        const [tenantData, organizationData] = await Promise.all([
-          fetchTenants(),
-          fetchOrganizations(),
-        ]);
+          const data =
+            await fetchOrganizations();
 
-        setTenants(
-          tenantData.filter(
-            (tenant) =>
-              tenant.deleted !== true &&
-              tenant.active !== false
-          )
-        );
+          const activeOrganizations =
+            data.filter(
+              (
+                organization: Organization
+              ) =>
+                organization.deleted !== true &&
+                organization.active !== false
+            );
 
-        setOrganizations(
-          organizationData.filter(
-            (organization) =>
-              organization.deleted !== true &&
-              organization.active !== false
-          )
-        );
-      } catch (error) {
-        const apiError = error as {
-          response?: {
-            data?: ApiErrorResponse;
-          };
-          message?: string;
-        };
+          setOrganizations(
+            activeOrganizations
+          );
+        } catch (error) {
+          const apiError =
+            error as {
+              response?: {
+                data?: ApiErrorResponse;
+              };
+            };
 
-        setSubmitError(
-          apiError.response?.data?.message ??
-            apiError.response?.data?.error ??
-            apiError.message ??
-            "Failed to load role configuration."
-        );
-      } finally {
-        setIsLoadingData(false);
-      }
-    };
+          setSubmitError(
+            apiError.response?.data
+              ?.message ??
+              apiError.response?.data
+                ?.error ??
+              "Failed to load organizations."
+          );
+        } finally {
+          setIsLoadingOrganizations(false);
+        }
+      };
 
-    void loadData();
+    void loadOrganizations();
   }, []);
 
   /* ==========================================================
-     SCOPE CHANGE
+     ROLE TYPE CHANGE
   ========================================================== */
 
-  useEffect(() => {
-    if (scopeType === "GLOBAL") {
-      form.setValue("tenantId", "");
-      form.setValue("organizationId", "");
-    }
-  }, [scopeType, form]);
+  const handleRoleTypeChange = (
+    value: string
+  ) => {
+    const roleType =
+      value as RoleType;
 
-  useEffect(() => {
-    form.setValue("organizationId", "");
-  }, [tenantId, form]);
+    form.setValue(
+      "roleType",
+      roleType,
+      {
+        shouldValidate: true,
+      }
+    );
+
+    /*
+     * GLOBAL roles do not have an organization.
+     */
+    if (roleType === "GLOBAL") {
+      form.setValue(
+        "organizationId",
+        "",
+        {
+          shouldValidate: true,
+        }
+      );
+    }
+  };
 
   /* ==========================================================
      SUBMIT
@@ -267,45 +327,61 @@ export default function AddRolesPage() {
       setIsSubmitting(true);
       setSubmitError("");
 
+      /*
+       * GLOBAL:
+       * organizationId = null
+       *
+       * TENANT:
+       * organizationId = selected UUID
+       */
       const payload = {
-        roleName: values.roleName.trim(),
+        organizationId:
+          values.roleType === "GLOBAL"
+            ? null
+            : values.organizationId,
 
-        roleCode: values.roleCode
-          .trim()
-          .toUpperCase(),
+        roleName:
+          values.roleName.trim(),
+
+        roleCode:
+          values.roleCode
+            .trim()
+            .toUpperCase(),
 
         description:
-          values.description.trim() || null,
+          values.description.trim() ||
+          null,
 
-        scopeType: values.scopeType,
+        roleType:
+          values.roleType,
 
-        tenantId:
-          values.scopeType === "TENANT"
-            ? values.tenantId
-            : null,
+        systemRole:
+          values.systemRole,
 
-        organizationId:
-          values.scopeType === "TENANT"
-            ? values.organizationId
-            : null,
-
-        active: values.active,
+        active:
+          values.active,
       };
 
-      await api.post("/api/v1/roles", payload);
+      await api.post(
+        "/api/v1/roles",
+        payload
+      );
 
       navigate("/roles");
     } catch (error) {
-      const apiError = error as {
-        response?: {
-          data?: ApiErrorResponse;
+      const apiError =
+        error as {
+          response?: {
+            data?: ApiErrorResponse;
+          };
+          message?: string;
         };
-        message?: string;
-      };
 
       setSubmitError(
-        apiError.response?.data?.message ??
-          apiError.response?.data?.error ??
+        apiError.response?.data
+          ?.message ??
+          apiError.response?.data
+            ?.error ??
           apiError.message ??
           "Failed to create role."
       );
@@ -315,46 +391,29 @@ export default function AddRolesPage() {
   };
 
   /* ==========================================================
-     LOADING
+     RETURN
   ========================================================== */
-
-  if (isLoadingData) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-7 w-7 animate-spin text-primary" />
-
-          <p className="text-sm text-muted-foreground">
-            Loading role configuration...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const filteredOrganizations =
-    tenantId
-      ? organizations.filter(
-          (organization) =>
-            !organization.tenantId ||
-            organization.tenantId === tenantId
-        )
-      : [];
 
   return (
     <div className="w-full min-w-0 bg-muted/20">
       <div className="w-full max-w-5xl p-4 sm:p-6">
 
-        {/* HEADER */}
+        {/* ====================================================
+            HEADER
+        ==================================================== */}
 
         <div className="mb-6">
+
           <Button
             type="button"
             variant="ghost"
             className="-ml-2 mb-3"
-            onClick={() => navigate("/roles")}
+            onClick={() =>
+              navigate("/roles")
+            }
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
+
             Back to Roles
           </Button>
 
@@ -363,10 +422,15 @@ export default function AddRolesPage() {
           </h1>
 
           <p className="mt-1 text-sm text-muted-foreground">
-            Create a global role or associate the role with a
-            tenant and organization.
+            Create a global or organization-specific
+            role and define its access scope.
           </p>
+
         </div>
+
+        {/* ====================================================
+            ERROR
+        ==================================================== */}
 
         {submitError && (
           <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -375,295 +439,492 @@ export default function AddRolesPage() {
         )}
 
         <form
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={form.handleSubmit( onSubmit)}
           className="space-y-6"
         >
 
-          {/* ROLE SCOPE */}
+          {/* ==================================================
+              ROLE SCOPE
+          ================================================== */}
 
           <Card>
+
             <CardHeader>
+
               <div className="flex items-center gap-3">
+
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Globe2 className="h-5 w-5 text-primary" />
+                  <ShieldCheck className="h-5 w-5 text-primary" />
                 </div>
 
                 <div>
+
                   <CardTitle>
                     Role Scope
                   </CardTitle>
 
                   <CardDescription>
-                    Choose whether this role is available globally
-                    or belongs to a specific tenant.
+                    Define whether this role is global
+                    or belongs to a specific organization.
                   </CardDescription>
+
                 </div>
+
               </div>
+
             </CardHeader>
 
             <CardContent className="space-y-5">
 
+              {/* ROLE TYPE */}
+
               <Field>
+
                 <FieldLabel>
-                  Scope *
+                  Role Type *
                 </FieldLabel>
 
                 <Select
-                  value={scopeType}
-                  onValueChange={(value) =>
-                    form.setValue(
-                      "scopeType",
-                      value as "GLOBAL" | "TENANT",
-                      {
-                        shouldValidate: true,
-                      }
-                    )
+                  value={
+                    selectedRoleType ||
+                    undefined
                   }
-                  disabled={isSubmitting}
+                  onValueChange={
+                    handleRoleTypeChange
+                  }
+                  disabled={
+                    isSubmitting
+                  }
                 >
+
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select role type" />
                   </SelectTrigger>
 
                   <SelectContent>
+
                     <SelectItem value="GLOBAL">
-                      Global
+
+                      <div className="flex items-center gap-2">
+
+                        <Globe2 className="h-4 w-4" />
+
+                        <div>
+                          <div>
+                            Global
+                          </div>
+
+                          <div className="text-xs text-muted-foreground">
+                            Platform-wide role
+                          </div>
+                        </div>
+
+                      </div>
+
                     </SelectItem>
 
                     <SelectItem value="TENANT">
-                      Tenant Specific
+
+                      <div className="flex items-center gap-2">
+
+                        <Building2 className="h-4 w-4" />
+
+                        <div>
+                          <div>
+                            Tenant
+                          </div>
+
+                          <div className="text-xs text-muted-foreground">
+                            Organization-specific role
+                          </div>
+                        </div>
+
+                      </div>
+
                     </SelectItem>
+
                   </SelectContent>
+
                 </Select>
+
+                <FieldError>
+                  {
+                    form.formState
+                      .errors
+                      .roleType
+                      ?.message
+                  }
+                </FieldError>
+
               </Field>
 
-              {scopeType === "GLOBAL" && (
-                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4">
-                  <div className="flex gap-3">
-                    <Globe2 className="mt-0.5 h-5 w-5 text-blue-600" />
+              {/* ORGANIZATION */}
+
+              <Field>
+
+                <FieldLabel>
+                  Organization
+                  {selectedRoleType ===
+                    "TENANT" && " *"}
+                </FieldLabel>
+
+                <Select
+                  value={
+                    selectedOrganizationId ||
+                    undefined
+                  }
+                  onValueChange={(
+                    value
+                  ) =>
+                    form.setValue(
+                      "organizationId",
+                      value,
+                      {
+                        shouldValidate:
+                          true,
+                      }
+                    )
+                  }
+                  disabled={
+                    selectedRoleType !==
+                      "TENANT" ||
+                    isLoadingOrganizations ||
+                    isSubmitting
+                  }
+                >
+
+                  <SelectTrigger>
+
+                    <SelectValue
+                      placeholder={
+                        selectedRoleType ===
+                        "GLOBAL"
+                          ? "Not applicable for Global role"
+                          : isLoadingOrganizations
+                          ? "Loading organizations..."
+                          : "Select organization"
+                      }
+                    />
+
+                  </SelectTrigger>
+
+                  <SelectContent>
+
+                    {organizations.map(
+                      (
+                        organization
+                      ) => (
+                        <SelectItem
+                          key={
+                            organization.id
+                          }
+                          value={
+                            organization.id
+                          }
+                        >
+                          {
+                            organization.orgName ??
+                            organization.id
+                          }
+                        </SelectItem>
+                      )
+                    )}
+
+                  </SelectContent>
+
+                </Select>
+
+                <FieldError>
+                  {
+                    form.formState
+                      .errors
+                      .organizationId
+                      ?.message
+                  }
+                </FieldError>
+
+              </Field>
+
+              {/* SCOPE INFORMATION */}
+
+              {selectedRoleType && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+
+                  <div className="flex items-start gap-3">
+
+                    {selectedRoleType ===
+                    "GLOBAL" ? (
+                      <Globe2 className="mt-0.5 h-4 w-4 shrink-0" />
+                    ) : (
+                      <Building2 className="mt-0.5 h-4 w-4 shrink-0" />
+                    )}
 
                     <div>
+
                       <p className="text-sm font-medium">
-                        Global Role
+                        {selectedRoleType ===
+                        "GLOBAL"
+                          ? "Global Role"
+                          : "Tenant Role"}
                       </p>
 
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        This role will not be associated with a
-                        tenant or organization and can be used
-                        globally.
+                      <p className="mt-1 text-xs text-muted-foreground">
+
+                        {selectedRoleType ===
+                        "GLOBAL"
+                          ? "This role is available at the platform level and is not associated with a specific organization."
+                          : "This role is scoped to the selected organization and is intended for users within that tenant."}
+
                       </p>
+
                     </div>
+
                   </div>
-                </div>
-              )}
-
-              {scopeType === "TENANT" && (
-                <div className="grid gap-5 md:grid-cols-2">
-
-                  <Field>
-                    <FieldLabel>
-                      Tenant *
-                    </FieldLabel>
-
-                    <Select
-                      value={tenantId}
-                      onValueChange={(value) =>
-                        form.setValue(
-                          "tenantId",
-                          value,
-                          {
-                            shouldValidate: true,
-                          }
-                        )
-                      }
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select tenant" />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        {tenants.map((tenant) => (
-                          <SelectItem
-                            key={tenant.id}
-                            value={tenant.id}
-                          >
-                            {tenant.tenantName ??
-                              tenant.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    <FieldError>
-                      {
-                        form.formState.errors.tenantId
-                          ?.message
-                      }
-                    </FieldError>
-                  </Field>
-
-                  <Field>
-                    <FieldLabel>
-                      Organization *
-                    </FieldLabel>
-
-                    <Select
-                      value={form.watch(
-                        "organizationId"
-                      )}
-                      onValueChange={(value) =>
-                        form.setValue(
-                          "organizationId",
-                          value,
-                          {
-                            shouldValidate: true,
-                          }
-                        )
-                      }
-                      disabled={
-                        isSubmitting || !tenantId
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue
-                          placeholder={
-                            tenantId
-                              ? "Select organization"
-                              : "Select tenant first"
-                          }
-                        />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        {filteredOrganizations.map(
-                          (organization) => (
-                            <SelectItem
-                              key={organization.id}
-                              value={organization.id}
-                            >
-                              {organization.orgName ??
-                                organization.name}
-                            </SelectItem>
-                          )
-                        )}
-                      </SelectContent>
-                    </Select>
-
-                    <FieldError>
-                      {
-                        form.formState.errors
-                          .organizationId?.message
-                      }
-                    </FieldError>
-                  </Field>
 
                 </div>
               )}
+
             </CardContent>
+
           </Card>
 
-          {/* ROLE INFORMATION */}
+          {/* ==================================================
+              ROLE INFORMATION
+          ================================================== */}
 
           <Card>
+
             <CardHeader>
+
               <CardTitle>
                 Role Information
               </CardTitle>
 
               <CardDescription>
-                Enter the role master information.
+                Enter the basic information for this role.
               </CardDescription>
+
             </CardHeader>
 
             <CardContent className="space-y-5">
 
+              {/* NAME + CODE */}
+
               <div className="grid gap-5 md:grid-cols-2">
 
+                {/* ROLE NAME */}
+
                 <Field>
+
                   <FieldLabel>
                     Role Name *
                   </FieldLabel>
 
                   <Input
-                    {...form.register("roleName")}
-                    placeholder="Manufacturing Admin"
-                    disabled={isSubmitting}
+                    {...form.register(
+                      "roleName"
+                    )}
+                    placeholder="HR Admin"
+                    disabled={
+                      isSubmitting
+                    }
                   />
 
                   <FieldError>
                     {
-                      form.formState.errors.roleName
+                      form.formState
+                        .errors
+                        .roleName
                         ?.message
                     }
                   </FieldError>
+
                 </Field>
 
+                {/* ROLE CODE */}
+
                 <Field>
+
                   <FieldLabel>
                     Role Code *
                   </FieldLabel>
 
                   <Input
-                    {...form.register("roleCode")}
-                    placeholder="MANUFACTURING_ADMIN"
+                    {...form.register(
+                      "roleCode"
+                    )}
+                    placeholder="HR_ADMIN"
                     className="uppercase"
-                    disabled={isSubmitting}
+                    disabled={
+                      isSubmitting
+                    }
+                    onChange={(event) => {
+                      event.target.value =
+                        event.target.value.toUpperCase();
+
+                      form.setValue(
+                        "roleCode",
+                        event.target.value,
+                        {
+                          shouldValidate:
+                            true,
+                        }
+                      );
+                    }}
                   />
+
+                  <p className="text-xs text-muted-foreground">
+                    Use a stable identifier such as HR_ADMIN or SUPPORT.
+                  </p>
 
                   <FieldError>
                     {
-                      form.formState.errors.roleCode
+                      form.formState
+                        .errors
+                        .roleCode
                         ?.message
                     }
                   </FieldError>
+
                 </Field>
 
               </div>
 
+              {/* DESCRIPTION */}
+
               <Field>
+
                 <FieldLabel>
                   Description
                 </FieldLabel>
 
                 <Textarea
-                  {...form.register("description")}
+                  {...form.register(
+                    "description"
+                  )}
                   rows={5}
-                  placeholder="Describe the responsibilities and access level of this role..."
-                  disabled={isSubmitting}
+                  placeholder="Describe the purpose and responsibilities of this role..."
+                  disabled={
+                    isSubmitting
+                  }
                 />
 
                 <FieldError>
                   {
-                    form.formState.errors.description
+                    form.formState
+                      .errors
+                      .description
                       ?.message
                   }
                 </FieldError>
+
               </Field>
 
+              {/* SYSTEM ROLE */}
+
               <Field>
+
+                <FieldLabel>
+                  System Role
+                </FieldLabel>
+
+                <Select
+                  value={
+                    form.watch(
+                      "systemRole"
+                    )
+                      ? "TRUE"
+                      : "FALSE"
+                  }
+                  onValueChange={(
+                    value
+                  ) =>
+                    form.setValue(
+                      "systemRole",
+                      value ===
+                        "TRUE",
+                      {
+                        shouldValidate:
+                          true,
+                      }
+                    )
+                  }
+                  disabled={
+                    isSubmitting
+                  }
+                >
+
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+
+                  <SelectContent>
+
+                    <SelectItem value="FALSE">
+                      No
+                    </SelectItem>
+
+                    <SelectItem value="TRUE">
+                      Yes
+                    </SelectItem>
+
+                  </SelectContent>
+
+                </Select>
+
+                <div className="flex items-start gap-2 text-xs text-muted-foreground">
+
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+
+                  <span>
+                    System roles are protected from
+                    normal modification and deletion.
+                  </span>
+
+                </div>
+
+              </Field>
+
+              {/* ACTIVE */}
+
+              <Field>
+
                 <FieldLabel>
                   Status
                 </FieldLabel>
 
                 <Select
                   value={
-                    form.watch("active")
+                    form.watch(
+                      "active"
+                    )
                       ? "ACTIVE"
                       : "INACTIVE"
                   }
-                  onValueChange={(value) =>
+                  onValueChange={(
+                    value
+                  ) =>
                     form.setValue(
                       "active",
-                      value === "ACTIVE"
+                      value ===
+                        "ACTIVE",
+                      {
+                        shouldValidate:
+                          true,
+                      }
                     )
                   }
+                  disabled={
+                    isSubmitting
+                  }
                 >
+
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
 
                   <SelectContent>
+
                     <SelectItem value="ACTIVE">
                       Active
                     </SelectItem>
@@ -671,44 +932,58 @@ export default function AddRolesPage() {
                     <SelectItem value="INACTIVE">
                       Inactive
                     </SelectItem>
+
                   </SelectContent>
+
                 </Select>
+
               </Field>
 
             </CardContent>
+
           </Card>
 
-          {/* ACTIONS */}
+          {/* ==================================================
+              ACTIONS
+          ================================================== */}
 
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+
             <Button
               type="button"
               variant="outline"
-              onClick={() => navigate("/roles")}
-              disabled={isSubmitting}
+              onClick={() =>
+                navigate("/roles")
+              }
+              disabled={
+                isSubmitting
+              }
             >
               Cancel
             </Button>
 
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={
+                isSubmitting ||
+                isLoadingOrganizations
+              }
             >
+
               {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Create Role
-                </>
+                <Save className="mr-2 h-4 w-4" />
               )}
+
+              Create Role
+
             </Button>
+
           </div>
 
         </form>
+
       </div>
     </div>
   );

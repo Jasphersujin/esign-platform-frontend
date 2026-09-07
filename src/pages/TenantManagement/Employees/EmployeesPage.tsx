@@ -89,7 +89,9 @@ import {
 interface Employee {
   id: string;
   organizationId?: string | null;
+  organizationName? : string | null;
   departmentId?: string | null;
+  departmentName?: string | null;
   employeeCode: string;
   firstName: string;
   lastName?: string | null;
@@ -412,21 +414,13 @@ function EmployeeActions({
 ============================================================ */
 
 export default function EmployeesPage() {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
 
-  const queryClient =
-    useQueryClient();
+  const queryClient = useQueryClient();
 
-  const [
-    searchInput,
-    setSearchInput,
-  ] = useState("");
+  const [searchInput, setSearchInput ] = useState("");
 
-  const [
-    search,
-    setSearch,
-  ] = useState("");
+  const [search, setSearch ] = useState("");
 
   const [
     organizationFilter,
@@ -1270,9 +1264,7 @@ export default function EmployeesPage() {
                             }
                           >
                             {
-                              getOrganizationName(
-                                employee.organizationId
-                              )
+                              employee.organizationName
                             }
                           </TableCell>
                         )}
@@ -1284,9 +1276,7 @@ export default function EmployeesPage() {
                             }
                           >
                             {
-                              getDepartmentName(
-                                employee.departmentId
-                              )
+                                employee.departmentName
                             }
                           </TableCell>
                         )}

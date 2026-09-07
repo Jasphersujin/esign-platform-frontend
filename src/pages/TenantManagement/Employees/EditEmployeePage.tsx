@@ -210,27 +210,25 @@ async function fetchOrganizations(): Promise<
 }
 
 
+
 async function fetchDepartments(
   organizationId: string
 ): Promise<Department[]> {
   const response =
     await api.get(
-      `/api/v1/departments?organizationId=${encodeURIComponent(
+      `/api/v1/departments/organization/${encodeURIComponent(
         organizationId
-      )}&size=100`
+      )}`
     );
 
   const data =
     response.data?.data ??
     response.data;
 
-  return (
-    data?.content ??
-    data ??
-    []
-  );
+  return Array.isArray(data)
+    ? data
+    : data?.content ?? [];
 }
-
 
 /* ============================================================
    PAGE

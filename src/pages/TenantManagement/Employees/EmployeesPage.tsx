@@ -179,6 +179,8 @@ async function fetchEmployees(): Promise<Employee[]> {
     response.data?.data ??
     response.data;
 
+  console.log(data)
+
   return Array.isArray(data)
     ? data
     : data?.content ?? [];

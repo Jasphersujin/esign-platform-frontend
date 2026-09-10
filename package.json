@@ -13,6 +13,9 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@cloudscape-design/board-components": "^3.0.227",
+    "@cloudscape-design/components": "^3.0.1371",
+    "@cloudscape-design/global-styles": "^1.0.68",
     "@fontsource-variable/inter": "^5.3.0",
     "@hookform/resolvers": "^5.7.1",
     "@shadcn/react": "^0.3.0",

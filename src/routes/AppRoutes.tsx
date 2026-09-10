@@ -22,6 +22,9 @@ import AddRolesPage from "@/pages/AccessControl/Roles/AddRolesPage";
 import ViewRolesPage from "@/pages/AccessControl/Roles/ViewRolesPage";
 import EditRolesPage from "@/pages/AccessControl/Roles/EditRolesPage";
 import AddSidebarPage from "@/pages/systemconfiguration/sidebar/AddSidebarPage";
+import SidebarPage from "@/pages/systemconfiguration/sidebar/SidebarPage";
+import EditSidebarPage from "@/pages/systemconfiguration/sidebar/EditSidebarPage";
+import ViewSidebarPage from "@/pages/systemconfiguration/sidebar/ViewSidebarPage";
 
 
 export default function AppRoutes() {
@@ -58,7 +61,10 @@ export default function AppRoutes() {
 
         {/* System Configuration */}
 
+        <Route path="/sidebars" element={<SidebarPage/>} />
         <Route path="/sidebars/new" element={<AddSidebarPage/>} />
+        <Route path="/sidebar/:id/edit" element={<EditSidebarPage/>} />
+        <Route path="/sidebar/:id" element={<ViewSidebarPage/>} />
         
         {/* Audit Trail */}
         <Route path="/audit-logs" element={<AuditTrailPage/>} />

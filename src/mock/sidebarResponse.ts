@@ -260,7 +260,7 @@ const sidebarResponse = [
       featureName: "Sidebar Management",
       icon: "panelLeft",
       displayOrder: 1,
-      route: "/system/sidebar",
+      route: "/sidebars",
       screenCode: "SIDEBAR_MANAGEMENT",
       permissions: [
         "VIEW",

@@ -290,7 +290,7 @@ const sidebarResponse = [
       featureName: "Screen Management",
       icon: "monitor",
       displayOrder: 3,
-      route: "/system/screens",
+      route: "/screens",
       screenCode: "SCREEN_MANAGEMENT",
       permissions: [
         "VIEW",

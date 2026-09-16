@@ -29,6 +29,8 @@ import MenusPage from "@/pages/systemconfiguration/menu/MenusPage";
 import ViewMenuPage from "@/pages/systemconfiguration/menu/ViewMenuPage";
 import AddMenuPage from "@/pages/systemconfiguration/menu/AddMenuPage";
 import EditMenuPage from "@/pages/systemconfiguration/menu/EditMenuPage";
+import ScreensPage from "@/pages/systemconfiguration/screens/ScreensPage";
+import AddScreenPage from "@/pages/systemconfiguration/screens/AddScreenPage";
 
 
 export default function AppRoutes() {
@@ -75,6 +77,10 @@ export default function AppRoutes() {
         <Route path="/menus/:id" element={<ViewMenuPage/>} />
         <Route path="/menus/new" element={<AddMenuPage/>} />
         <Route path="/menus/:id/edit" element={<EditMenuPage/>} />
+
+        {/* Screen Management */}
+        <Route path="/screens" element={<ScreensPage/>} />
+        <Route path="/screens/new" element={<AddScreenPage/>} />
         
         {/* Audit Trail */}
         <Route path="/audit-logs" element={<AuditTrailPage/>} />

@@ -275,7 +275,7 @@ const sidebarResponse = [
       featureName: "Menu Management",
       icon: "logs",
       displayOrder: 2,
-      route: "/system/menus",
+      route: "/menus",
       screenCode: "MENU_MANAGEMENT",
       permissions: [
         "VIEW",

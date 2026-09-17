@@ -33,6 +33,10 @@ import ScreensPage from "@/pages/systemconfiguration/screens/ScreensPage";
 import AddScreenPage from "@/pages/systemconfiguration/screens/AddScreenPage";
 import EditScreenPage from "@/pages/systemconfiguration/screens/EditScreenPage";
 import ViewScreenPage from "@/pages/systemconfiguration/screens/ViewScreenPage";
+import ActionsPage from "@/pages/systemconfiguration/actions/ActionsPage";
+import AddActionPage from "@/pages/systemconfiguration/actions/AddActionPage";
+import EditActionPage from "@/pages/systemconfiguration/actions/EditActionPage";
+import ViewActionPage from "@/pages/systemconfiguration/actions/ViewActionPage";
 
 
 export default function AppRoutes() {
@@ -85,6 +89,12 @@ export default function AppRoutes() {
         <Route path="/screens/new" element={<AddScreenPage/>} />
         <Route path="/screens/:id/edit" element={<EditScreenPage/>} />
         <Route path="/screens/:id" element={<ViewScreenPage/>} />
+
+        {/* Actions Management */}
+        <Route path="/actions" element={<ActionsPage/>} />
+        <Route path="/actions/new" element={<AddActionPage/>} />
+        <Route path="/actions/:id/edit" element={<EditActionPage/>}/>
+        <Route path="/actions/:id" element={<ViewActionPage/>} />
         
         {/* Audit Trail */}
         <Route path="/audit-logs" element={<AuditTrailPage/>} />

@@ -305,7 +305,7 @@ const sidebarResponse = [
       featureName: "Action Management",
       icon: "mousePointerClick",
       displayOrder: 4,
-      route: "/system/actions",
+      route: "/actions",
       screenCode: "ACTION_MANAGEMENT",
       permissions: [
         "VIEW",

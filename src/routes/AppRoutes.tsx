@@ -37,6 +37,7 @@ import ActionsPage from "@/pages/systemconfiguration/actions/ActionsPage";
 import AddActionPage from "@/pages/systemconfiguration/actions/AddActionPage";
 import EditActionPage from "@/pages/systemconfiguration/actions/EditActionPage";
 import ViewActionPage from "@/pages/systemconfiguration/actions/ViewActionPage";
+import UsersPage from "@/pages/usersManagement/users/UsersPage";
 
 
 export default function AppRoutes() {
@@ -95,6 +96,9 @@ export default function AppRoutes() {
         <Route path="/actions/new" element={<AddActionPage/>} />
         <Route path="/actions/:id/edit" element={<EditActionPage/>}/>
         <Route path="/actions/:id" element={<ViewActionPage/>} />
+
+        {/* Users */}
+        <Route path="/users" element={<UsersPage/>} />
         
         {/* Audit Trail */}
         <Route path="/audit-logs" element={<AuditTrailPage/>} />

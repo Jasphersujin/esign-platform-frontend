@@ -104,8 +104,9 @@ export default function AppRoutes() {
         <Route path="/audit-logs" element={<AuditTrailPage/>} />
 
         {/* Settings */}
-
         <Route path="/settings" element={<SettingsPage/>} />
+        
+        
       </Route>
     </Routes>
   );

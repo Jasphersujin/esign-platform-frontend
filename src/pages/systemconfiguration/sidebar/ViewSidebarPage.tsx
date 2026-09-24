@@ -1,3 +1,4 @@
+
 import React, {
   useEffect,
   useState,
@@ -18,7 +19,11 @@ import {
   useParams,
 } from "react-router-dom";
 
-import api from "@/api/api";
+import {
+  getSidebarById,
+  deleteSidebar,
+  restoreSidebar,
+} from "@/api/sidebar.api";
 
 import { Button } from "@/components/ui/button";
 
@@ -37,9 +42,10 @@ import { Badge } from "@/components/ui/badge";
 
 interface SidebarResponse {
   id: string;
-  sidebarName: string;
+  displayName: string;
+  description?: string | null;
+  icon?: string | null;
   displayOrder: number;
-  sidebarDescription?: string | null;
   active: boolean;
   deleted: boolean;
   createdAt?: string;
@@ -224,13 +230,11 @@ export default function ViewSidebarPage() {
           setIsLoading(true);
           setError("");
 
-          const response =
-            await api.get<SidebarResponse>(
-              `/api/v1/sidebars/${id}`
-            );
+          const data =
+            await getSidebarById(id);
 
           setSidebar(
-            response.data
+            data as SidebarResponse
           );
         } catch (error) {
           const apiError = error as {
@@ -266,7 +270,7 @@ export default function ViewSidebarPage() {
 
       const confirmed =
         window.confirm(
-          `Delete sidebar "${sidebar.sidebarName}"?`
+          `Delete sidebar "${sidebar.displayName}"?`
         );
 
       if (!confirmed) {
@@ -277,8 +281,8 @@ export default function ViewSidebarPage() {
         setActionLoading(true);
         setError("");
 
-        await api.delete(
-          `/api/v1/sidebars/${sidebar.id}`
+        await deleteSidebar(
+          sidebar.id
         );
 
         navigate("/sidebars");
@@ -313,7 +317,7 @@ export default function ViewSidebarPage() {
 
       const confirmed =
         window.confirm(
-          `Restore sidebar "${sidebar.sidebarName}"?`
+          `Restore sidebar "${sidebar.displayName}"?`
         );
 
       if (!confirmed) {
@@ -324,17 +328,17 @@ export default function ViewSidebarPage() {
         setActionLoading(true);
         setError("");
 
-        await api.put(
-          `/api/v1/sidebars/${sidebar.id}/restore`
+        await restoreSidebar(
+          sidebar.id
         );
 
-        const response =
-          await api.get<SidebarResponse>(
-            `/api/v1/sidebars/${sidebar.id}`
+        const data =
+          await getSidebarById(
+            sidebar.id
           );
 
         setSidebar(
-          response.data
+          data as SidebarResponse
         );
       } catch (error) {
         const apiError = error as {
@@ -523,14 +527,14 @@ export default function ViewSidebarPage() {
 
               <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-lg font-semibold text-primary">
                 {getInitials(
-                  sidebar.sidebarName
+                  sidebar.displayName
                 )}
               </div>
 
               <div className="min-w-0 flex-1">
 
                 <h2 className="break-words text-xl font-semibold">
-                  {sidebar.sidebarName}
+                  {sidebar.displayName}
                 </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -574,9 +578,9 @@ export default function ViewSidebarPage() {
             <div className="grid gap-6 sm:grid-cols-2">
 
               <InfoItem
-                label="Sidebar Name"
+                label="Display Name"
                 value={
-                  sidebar.sidebarName
+                  sidebar.displayName
                 }
               />
 
@@ -587,12 +591,20 @@ export default function ViewSidebarPage() {
                 }
               />
 
+              <InfoItem
+                label="Icon"
+                value={
+                  sidebar.icon ||
+                  "No icon configured"
+                }
+              />
+
               <div className="sm:col-span-2">
 
                 <InfoItem
-                  label="Sidebar Description"
+                  label="Description"
                   value={
-                    sidebar.sidebarDescription ||
+                    sidebar.description ||
                     "No description provided"
                   }
                 />

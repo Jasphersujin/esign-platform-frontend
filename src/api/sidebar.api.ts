@@ -163,3 +163,43 @@ export async function updateSidebar(
 
   return response.data.data;
 }
+
+
+export interface Sidebar {
+  id: string;
+  displayName: string;
+  description?: string | null;
+  icon?: string | null;
+  displayOrder: number;
+  active: boolean;
+  deleted: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  version?: number;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T;
+}
+
+export interface CreateSidebarRequest {
+  displayName: string;
+  description?: string | null;
+  icon?: string | null;
+  displayOrder: number;
+}
+
+export interface UpdateSidebarRequest {
+  displayName: string;
+  description?: string | null;
+  icon?: string | null;
+  displayOrder: number;
+}
+
+
+
+
+
+

@@ -96,3 +96,70 @@ export async function restoreSidebar(
 
   return response.data;
 }
+
+export interface CreateSidebarRequest {
+  displayName: string;
+  description?: string | null;
+  icon?: string | null;
+  displayOrder: number;
+}
+
+export interface Sidebar {
+  id: string;
+  displayName: string;
+  description?: string | null;
+  icon?: string | null;
+  displayOrder: number;
+  active: boolean;
+  deleted: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  version?: number;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T;
+}
+
+export async function createSidebar(
+  payload: CreateSidebarRequest
+): Promise<Sidebar> {
+  const response = await api.post<ApiResponse<Sidebar>>(
+    "/api/v1/sidebars",
+    payload
+  );
+
+  return response.data.data;
+}
+
+
+export interface UpdateSidebarRequest {
+  displayName: string;
+  description?: string | null;
+  icon?: string | null;
+  displayOrder: number;
+}
+
+export async function getSidebarById(
+  id: string
+): Promise<Sidebar> {
+  const response = await api.get<ApiResponse<Sidebar>>(
+    `/api/v1/sidebars/${id}`
+  );
+
+  return response.data.data;
+}
+
+export async function updateSidebar(
+  id: string,
+  payload: UpdateSidebarRequest
+): Promise<Sidebar> {
+  const response = await api.put<ApiResponse<Sidebar>>(
+    `/api/v1/sidebars/${id}`,
+    payload
+  );
+
+  return response.data.data;
+}

@@ -76,8 +76,8 @@ export default function AppRoutes() {
 
         <Route path="/sidebars" element={<SidebarPage/>} />
         <Route path="/sidebars/new" element={<AddSidebarPage/>} />
-        <Route path="/sidebar/:id/edit" element={<EditSidebarPage/>} />
-        <Route path="/sidebar/:id" element={<ViewSidebarPage/>} />
+        <Route path="/sidebars/:id/edit" element={<EditSidebarPage/>} />
+        <Route path="/sidebars/:id" element={<ViewSidebarPage/>} />
 
         {/* Menu Management */}
         <Route path="/menus" element={<MenusPage/>} />

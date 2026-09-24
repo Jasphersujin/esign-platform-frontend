@@ -5,7 +5,7 @@ import * as z from "zod";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import api from "@/api/api";
+import { createSidebar } from "@/api/sidebar.api";
 
 import { Button } from "@/components/ui/button";
 
@@ -32,9 +32,10 @@ import { Textarea } from "@/components/ui/textarea";
 ============================================================ */
 
 interface SidebarFormValues {
-  sidebarName: string;
+  displayName: string;
+  description: string;
+  icon: string;
   displayOrder: number;
-  sidebarDescription: string;
 }
 
 interface ApiErrorResponse {
@@ -47,22 +48,35 @@ interface ApiErrorResponse {
 ============================================================ */
 
 const sidebarSchema = z.object({
-  sidebarName: z
+  displayName: z
     .string()
     .trim()
-    .min(2, "Sidebar name must be at least 2 characters")
-    .max(255, "Sidebar name cannot exceed 255 characters"),
+    .min(1, "Display name is required")
+    .max(
+      150,
+      "Display name must not exceed 150 characters"
+    ),
+
+  description: z
+    .string()
+    .max(
+      1000,
+      "Description must not exceed 1000 characters"
+    ),
+
+  icon: z
+    .string()
+    .max(
+      100,
+      "Icon must not exceed 100 characters"
+    ),
 
   displayOrder: z
     .number()
     .int("Display order must be a whole number")
-    .min(1, "Display order must be at least 1"),
-
-  sidebarDescription: z
-    .string()
-    .max(
-      1000,
-      "Sidebar description cannot exceed 1000 characters"
+    .min(
+      0,
+      "Display order cannot be negative"
     ),
 });
 
@@ -83,9 +97,10 @@ const AddSidebarPage = () => {
     resolver: zodResolver(sidebarSchema),
 
     defaultValues: {
-      sidebarName: "",
-      displayOrder: 1,
-      sidebarDescription: "",
+      displayName: "",
+      description: "",
+      icon: "",
+      displayOrder: 0,
     },
 
     mode: "onBlur",
@@ -105,18 +120,18 @@ const AddSidebarPage = () => {
       setSubmitError("");
 
       const payload = {
-        sidebarName: values.sidebarName.trim(),
+        displayName: values.displayName.trim(),
+
+        description:
+          values.description.trim() || null,
+
+        icon:
+          values.icon.trim() || null,
 
         displayOrder: values.displayOrder,
-
-        sidebarDescription:
-          values.sidebarDescription.trim() || null,
       };
 
-      await api.post(
-        "/api/v1/sidebars",
-        payload
-      );
+      await createSidebar(payload);
 
       navigate("/sidebars");
     } catch (error) {
@@ -164,7 +179,8 @@ const AddSidebarPage = () => {
           </h1>
 
           <p className="mt-1 text-sm text-muted-foreground">
-            Create a sidebar and define its display order and description.
+            Create a sidebar and define its display
+            order, icon, and description.
           </p>
         </div>
 
@@ -196,19 +212,19 @@ const AddSidebarPage = () => {
 
             <CardContent className="space-y-5">
 
-              {/* SIDEBAR NAME + DISPLAY ORDER */}
+              {/* DISPLAY NAME + DISPLAY ORDER */}
 
               <div className="grid gap-5 md:grid-cols-2">
 
-                {/* SIDEBAR NAME */}
+                {/* DISPLAY NAME */}
 
                 <Field>
                   <FieldLabel>
-                    Sidebar Name *
+                    Display Name *
                   </FieldLabel>
 
                   <Input
-                    {...form.register("sidebarName")}
+                    {...form.register("displayName")}
                     placeholder="Dashboard"
                     disabled={isSubmitting}
                   />
@@ -216,7 +232,7 @@ const AddSidebarPage = () => {
                   <FieldError>
                     {
                       form.formState.errors
-                        .sidebarName?.message
+                        .displayName?.message
                     }
                   </FieldError>
                 </Field>
@@ -230,14 +246,14 @@ const AddSidebarPage = () => {
 
                   <Input
                     type="number"
-                    min={1}
+                    min={0}
                     {...form.register(
                       "displayOrder",
                       {
                         valueAsNumber: true,
                       }
                     )}
-                    placeholder="1"
+                    placeholder="0"
                     disabled={isSubmitting}
                   />
 
@@ -251,17 +267,36 @@ const AddSidebarPage = () => {
 
               </div>
 
+              {/* ICON */}
+
+              <Field>
+                <FieldLabel>
+                  Icon <a className="underline text-blue-600 italic" target="blank" href="https://lucide.dev/icons/">Lucide Icons</a>
+                </FieldLabel>
+
+                <Input
+                  {...form.register("icon")}
+                  placeholder="LayoutDashboard"
+                  disabled={isSubmitting}
+                />
+
+                <FieldError>
+                  {
+                    form.formState.errors
+                      .icon?.message
+                  }
+                </FieldError>
+              </Field>
+
               {/* DESCRIPTION */}
 
               <Field>
                 <FieldLabel>
-                  Sidebar Description
+                  Description
                 </FieldLabel>
 
                 <Textarea
-                  {...form.register(
-                    "sidebarDescription"
-                  )}
+                  {...form.register("description")}
                   rows={5}
                   placeholder="Enter sidebar description..."
                   disabled={isSubmitting}
@@ -270,7 +305,7 @@ const AddSidebarPage = () => {
                 <FieldError>
                   {
                     form.formState.errors
-                      .sidebarDescription?.message
+                      .description?.message
                   }
                 </FieldError>
               </Field>

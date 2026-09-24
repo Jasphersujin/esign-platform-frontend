@@ -88,7 +88,7 @@ import api from "@/api/api";
 
 interface Sidebar {
   id: string;
-  sidebarName: string;
+  displayName: string;
   displayOrder: number;
   sidebarDescription?: string | null;
   active: boolean;
@@ -96,6 +96,12 @@ interface Sidebar {
   createdAt?: string;
   updatedAt?: string;
   version?: number;
+}
+
+interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T;
 }
 
 interface SidebarPageResponse {
@@ -108,9 +114,11 @@ interface SidebarPageResponse {
   last: boolean;
 }
 
+
+
 interface SidebarFilters {
   search: string;
-  sidebarName: string;
+  displayName: string;
   status:
     | "ACTIVE"
     | "INACTIVE"
@@ -150,7 +158,7 @@ interface VisibleColumns {
 
 const DEFAULT_FILTERS: SidebarFilters = {
   search: "",
-  sidebarName: "",
+  displayName: "",
   status: "ACTIVE",
   includeDeleted: false,
   createdFrom: "",
@@ -243,10 +251,10 @@ async function fetchSidebars(
     );
   }
 
-  if (filters.sidebarName.trim()) {
+  if (filters.displayName.trim()) {
     params.set(
-      "sidebarName",
-      filters.sidebarName.trim()
+      "displayName",
+      filters.displayName.trim()
     );
   }
 
@@ -328,13 +336,16 @@ async function fetchSidebars(
     filters.sortDirection
   );
 
+
   const response =
-    await api.get<SidebarPageResponse>(
+    await api.get<ApiResponse<SidebarPageResponse>>(
       `/api/v1/sidebars/search?${params.toString()}`
     );
-
-  return response.data;
+   console.log( response.data.data)
+  return response.data.data;
 }
+
+  
 
 /* ============================================================
    STATUS BADGE
@@ -678,7 +689,7 @@ export default function SidebarPage() {
   ): Promise<void> => {
     const confirmed =
       window.confirm(
-        `Delete sidebar "${sidebar.sidebarName}"?`
+        `Delete sidebar "${sidebar.displayName}"?`
       );
 
     if (!confirmed) {
@@ -713,7 +724,7 @@ export default function SidebarPage() {
   ): Promise<void> => {
     const confirmed =
       window.confirm(
-        `Restore sidebar "${sidebar.sidebarName}"?`
+        `Restore sidebar "${sidebar.displayName}"?`
       );
 
     if (!confirmed) {
@@ -781,10 +792,10 @@ export default function SidebarPage() {
         }
 
         if (
-          filters.sidebarName
+          filters.displayName
         ) {
           result.push(
-            `Name: ${filters.sidebarName}`
+            `Name: ${filters.displayName}`
           );
         }
 
@@ -1290,7 +1301,7 @@ export default function SidebarPage() {
                             className="cursor-pointer"
                             onClick={() =>
                               changeSort(
-                                "sidebarName"
+                                "displayName"
                               )
                             }
                           >
@@ -1375,17 +1386,11 @@ export default function SidebarPage() {
 
                                 <div className="flex items-center gap-3">
 
-                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
-                                    {getInitials(
-                                      sidebar.sidebarName
-                                    )}
-                                  </div>
-
                                   <div className="min-w-0">
 
                                     <p className="truncate font-medium">
                                       {
-                                        sidebar.sidebarName
+                                        sidebar.displayName
                                       }
                                     </p>
 
@@ -1541,7 +1546,7 @@ export default function SidebarPage() {
 
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-semibold text-primary">
                               {getInitials(
-                                sidebar.sidebarName
+                                sidebar.displayName
                               )}
                             </div>
 
@@ -1549,7 +1554,7 @@ export default function SidebarPage() {
 
                               <p className="truncate font-medium">
                                 {
-                                  sidebar.sidebarName
+                                  sidebar.displayName
                                 }
                               </p>
 
@@ -1647,7 +1652,7 @@ export default function SidebarPage() {
 
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-semibold text-primary">
                               {getInitials(
-                                sidebar.sidebarName
+                                sidebar.displayName
                               )}
                             </div>
 
@@ -1655,7 +1660,7 @@ export default function SidebarPage() {
 
                               <p className="truncate font-semibold">
                                 {
-                                  sidebar.sidebarName
+                                  sidebar.displayName
                                 }
                               </p>
 
@@ -1915,7 +1920,7 @@ export default function SidebarPage() {
 
                 <Input
                   value={
-                    draftFilters.sidebarName
+                    draftFilters.displayName
                   }
                   onChange={(
                     event
@@ -1925,7 +1930,7 @@ export default function SidebarPage() {
                         current
                       ) => ({
                         ...current,
-                        sidebarName:
+                        displayName:
                           event
                             .target
                             .value,

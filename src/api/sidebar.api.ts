@@ -73,9 +73,7 @@ export async function getSidebars(
    DELETE SIDEBAR
    ============================================================ */
 
-export async function deleteSidebar(
-  id: string
-) {
+export async function deleteSidebar(id: string) {
   const response = await api.delete<
     ApiResponse<void>
   >(`/api/v1/sidebars/${id}`);

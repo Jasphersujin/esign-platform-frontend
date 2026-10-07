@@ -9,7 +9,8 @@ import {
   Clock3,
   Loader2,
   Pencil,
-  RotateCcw,
+  Power,
+  PowerOff,
   Trash2,
 } from "lucide-react";
 
@@ -19,6 +20,14 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom";
+
+import {
+  activateMenu,
+  deactivateMenu,
+  deleteMenu,
+  getMenuById,
+  type Menu,
+} from "@/api/menu.api";
 
 import api from "@/api/api";
 
@@ -37,27 +46,38 @@ import { Badge } from "@/components/ui/badge";
    TYPES
 ============================================================ */
 
-interface MenuResponse {
+interface SidebarResponse {
   id: string;
-  displayName: string;
-  icon: string;
-  displayOrder: number;
-  description?: string | null;
-  active: boolean;
-  deleted: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  version?: number;
-}
-
-interface ApiErrorResponse {
-  message?: string;
-  error?: string;
+  displayName?: string;
+  sidebarName?: string;
+  name?: string;
 }
 
 /* ============================================================
    HELPERS
 ============================================================ */
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string
+) {
+  const e = error as {
+    response?: {
+      data?: {
+        message?: string;
+        error?: string;
+      };
+    };
+    message?: string;
+  };
+
+  return (
+    e.response?.data?.message ??
+    e.response?.data?.error ??
+    e.message ??
+    fallback
+  );
+}
 
 function formatDateTime(
   value?: string
@@ -140,6 +160,7 @@ function InfoItem({
 }) {
   return (
     <div>
+
       <p className="mb-1 text-xs font-medium text-muted-foreground">
         {label}
       </p>
@@ -147,6 +168,7 @@ function InfoItem({
       <p className="break-words text-sm">
         {value ?? "Not available"}
       </p>
+
     </div>
   );
 }
@@ -158,9 +180,9 @@ function InfoItem({
 function MenuIcon({
   iconName,
 }: {
-  iconName: string;
+  iconName?: string | null;
 }) {
-  const IconComponent =
+  const Icon =
     (
       LucideIcons as unknown as Record<
         string,
@@ -168,44 +190,61 @@ function MenuIcon({
           className?: string;
         }>
       >
-    )[iconName];
-
-  if (!IconComponent) {
-    return (
-      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        <LucideIcons.Menu className="h-7 w-7" />
-      </div>
-    );
-  }
+    )[iconName || "Menu"] ??
+    LucideIcons.Menu;
 
   return (
     <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-      <IconComponent className="h-7 w-7" />
+      <Icon className="h-7 w-7" />
     </div>
   );
+}
+
+/* ============================================================
+   SIDEBAR NAME
+============================================================ */
+
+async function getSidebar(
+  sidebarId: string
+): Promise<SidebarResponse> {
+  const response =
+    await api.get<{
+      success: boolean;
+      message: string;
+      data: SidebarResponse;
+    }>(
+      `/api/v1/sidebars/${sidebarId}`
+    );
+
+  return response.data.data;
 }
 
 /* ============================================================
    PAGE
 ============================================================ */
 
-const ViewMenuPage = () => {
+export default function ViewMenuPage() {
   const navigate = useNavigate();
 
   const { id } =
     useParams<{ id: string }>();
 
   const [menu, setMenu] =
-    useState<MenuResponse | null>(null);
+    useState<Menu | null>(null);
 
-  const [isLoading, setIsLoading] =
-    useState<boolean>(true);
+  const [sidebar, setSidebar] =
+    useState<SidebarResponse | null>(
+      null
+    );
+
+  const [loading, setLoading] =
+    useState(true);
 
   const [actionLoading, setActionLoading] =
-    useState<boolean>(false);
+    useState(false);
 
   const [error, setError] =
-    useState<string>("");
+    useState("");
 
   /* ==========================================================
      LOAD
@@ -214,107 +253,127 @@ const ViewMenuPage = () => {
   useEffect(() => {
     if (!id) {
       setError("Menu ID is missing.");
-      setIsLoading(false);
+      setLoading(false);
       return;
     }
 
-    const loadMenu =
-      async (): Promise<void> => {
-        try {
-          setIsLoading(true);
-          setError("");
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError("");
 
-          const response =
-            await api.get<MenuResponse>(
-              `/api/v1/menus/${id}`
+        const menuData =
+          await getMenuById(id);
+
+        setMenu(menuData);
+
+        if (menuData.sidebarId) {
+          try {
+            const sidebarData =
+              await getSidebar(
+                menuData.sidebarId
+              );
+
+            setSidebar(
+              sidebarData
             );
-
-          setMenu(response.data);
-        } catch (error) {
-          const apiError = error as {
-            response?: {
-              data?: ApiErrorResponse;
-            };
-            message?: string;
-          };
-
-          setError(
-            apiError.response?.data?.message ??
-              apiError.response?.data?.error ??
-              apiError.message ??
-              "Failed to load menu."
-          );
-        } finally {
-          setIsLoading(false);
+          } catch {
+            setSidebar(null);
+          }
+        } else {
+          setSidebar(null);
         }
-      };
+      } catch (e) {
+        setError(
+          getErrorMessage(
+            e,
+            "Failed to load menu."
+          )
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    void loadMenu();
+    void load();
   }, [id]);
 
   /* ==========================================================
      DELETE
   ========================================================== */
 
-  const handleDelete =
-    async (): Promise<void> => {
-      if (!menu) {
-        return;
-      }
+  const handleDelete = async () => {
+    if (!menu) return;
 
-      const confirmed =
-        window.confirm(
-          `Delete menu "${menu.displayName}"?`
-        );
+    if (
+      !window.confirm(
+        `Delete menu "${menu.menuName}"?`
+      )
+    ) {
+      return;
+    }
 
-      if (!confirmed) {
-        return;
-      }
+    try {
+      setActionLoading(true);
+      setError("");
 
-      try {
-        setActionLoading(true);
-        setError("");
+      await deleteMenu(menu.id);
 
-        await api.delete(
-          `/api/v1/menus/${menu.id}`
-        );
-
-        navigate("/menus");
-      } catch (error) {
-        const apiError = error as {
-          response?: {
-            data?: ApiErrorResponse;
-          };
-          message?: string;
-        };
-
-        setError(
-          apiError.response?.data?.message ??
-            apiError.response?.data?.error ??
-            apiError.message ??
-            "Failed to delete menu."
-        );
-      } finally {
-        setActionLoading(false);
-      }
-    };
+      navigate("/menus");
+    } catch (e) {
+      setError(
+        getErrorMessage(
+          e,
+          "Failed to delete menu."
+        )
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   /* ==========================================================
-     RESTORE
+     ACTIVATE
   ========================================================== */
 
-  const handleRestore =
-    async (): Promise<void> => {
-      if (!menu) {
-        return;
-      }
+  const handleActivate = async () => {
+    if (!menu) return;
 
-      const confirmed =
-        window.confirm(
-          `Restore menu "${menu.displayName}"?`
-        );
+    try {
+      setActionLoading(true);
+      setError("");
 
-      if (!confirmed) {
+      await activateMenu(menu.id);
+
+      setMenu({
+        ...menu,
+        active: true,
+      });
+    } catch (e) {
+      setError(
+        getErrorMessage(
+          e,
+          "Failed to activate menu."
+        )
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  /* ==========================================================
+     DEACTIVATE
+  ========================================================== */
+
+  const handleDeactivate =
+    async () => {
+      if (!menu) return;
+
+      if (
+        !window.confirm(
+          `Deactivate menu "${menu.menuName}"?`
+        )
+      ) {
         return;
       }
 
@@ -322,29 +381,20 @@ const ViewMenuPage = () => {
         setActionLoading(true);
         setError("");
 
-        await api.put(
-          `/api/v1/menus/${menu.id}/restore`
+        await deactivateMenu(
+          menu.id
         );
 
-        const response =
-          await api.get<MenuResponse>(
-            `/api/v1/menus/${menu.id}`
-          );
-
-        setMenu(response.data);
-      } catch (error) {
-        const apiError = error as {
-          response?: {
-            data?: ApiErrorResponse;
-          };
-          message?: string;
-        };
-
+        setMenu({
+          ...menu,
+          active: false,
+        });
+      } catch (e) {
         setError(
-          apiError.response?.data?.message ??
-            apiError.response?.data?.error ??
-            apiError.message ??
-            "Failed to restore menu."
+          getErrorMessage(
+            e,
+            "Failed to deactivate menu."
+          )
         );
       } finally {
         setActionLoading(false);
@@ -355,16 +405,20 @@ const ViewMenuPage = () => {
      LOADING
   ========================================================== */
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
+
         <div className="flex flex-col items-center gap-3">
+
           <Loader2 className="h-7 w-7 animate-spin text-primary" />
 
           <p className="text-sm text-muted-foreground">
             Loading menu...
           </p>
+
         </div>
+
       </div>
     );
   }
@@ -373,9 +427,10 @@ const ViewMenuPage = () => {
      ERROR
   ========================================================== */
 
-  if (error) {
+  if (error && !menu) {
     return (
       <div className="w-full min-w-0 p-4 sm:p-6">
+
         <Button
           variant="ghost"
           className="-ml-2 mb-4"
@@ -388,42 +443,41 @@ const ViewMenuPage = () => {
         </Button>
 
         <Card>
-          <CardContent className="p-6 text-sm text-destructive">
-            {error}
+
+          <CardContent className="p-6">
+
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+
           </CardContent>
+
         </Card>
+
       </div>
     );
   }
 
   if (!menu) {
-    return (
-      <div className="w-full p-4 sm:p-6">
-        <Card>
-          <CardContent className="p-6">
-            Menu not found.
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return null;
   }
 
   /* ==========================================================
-     RENDER
+     UI
   ========================================================== */
 
   return (
-    <div className="w-full min-w-0 bg-muted/20">
-      <div className="w-full max-w-5xl p-4 sm:p-6">
+    <div className="w-full min-w-0 space-y-5 p-4 sm:p-6">
 
-        {/* HEADER */}
+      {/* HEADER */}
 
-        <div className="mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+        <div>
 
           <Button
-            type="button"
             variant="ghost"
-            className="-ml-2 mb-3"
+            className="-ml-2 mb-2"
             onClick={() =>
               navigate("/menus")
             }
@@ -432,170 +486,304 @@ const ViewMenuPage = () => {
             Back to Menus
           </Button>
 
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Menu Details
+          </h1>
 
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Menu Details
-              </h1>
+          <p className="text-sm text-muted-foreground">
+            View menu configuration and hierarchy.
+          </p>
 
-              <p className="mt-1 text-sm text-muted-foreground">
-                View menu information and configuration.
-              </p>
-            </div>
-
-            {/* ACTIONS */}
-
-            <div className="flex flex-wrap gap-2">
-
-              {!menu.deleted && (
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    navigate(
-                      `/menus/${menu.id}/edit`
-                    )
-                  }
-                  disabled={actionLoading}
-                >
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Edit
-                </Button>
-              )}
-
-              {menu.deleted ? (
-                <Button
-                  onClick={handleRestore}
-                  disabled={actionLoading}
-                >
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Restore
-                </Button>
-              ) : (
-                <Button
-                  variant="destructive"
-                  onClick={handleDelete}
-                  disabled={actionLoading}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </Button>
-              )}
-
-            </div>
-
-          </div>
         </div>
 
-        {/* OVERVIEW */}
+        <div className="flex flex-wrap gap-2">
 
-        <Card className="mb-6">
-          <CardContent className="p-6">
+          <Button
+            variant="outline"
+            onClick={() =>
+              navigate(
+                `/menus/${menu.id}/edit`
+              )
+            }
+            disabled={
+              actionLoading
+            }
+          >
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit
+          </Button>
 
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+          {menu.active ? (
+            <Button
+              variant="outline"
+              onClick={
+                handleDeactivate
+              }
+              disabled={
+                actionLoading
+              }
+            >
+              <PowerOff className="mr-2 h-4 w-4" />
+              Deactivate
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={
+                handleActivate
+              }
+              disabled={
+                actionLoading
+              }
+            >
+              <Power className="mr-2 h-4 w-4" />
+              Activate
+            </Button>
+          )}
 
-              <MenuIcon
-                iconName={menu.icon}
-              />
+          <Button
+            variant="destructive"
+            onClick={handleDelete}
+            disabled={
+              actionLoading
+            }
+          >
+            {actionLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="mr-2 h-4 w-4" />
+            )}
 
-              <div className="min-w-0 flex-1">
+            Delete
+          </Button>
 
-                <h2 className="break-words text-xl font-semibold">
-                  {menu.displayName}
-                </h2>
+        </div>
 
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Display Order:{" "}
-                  <span className="font-medium text-foreground">
-                    {menu.displayOrder}
-                  </span>
-                </p>
+      </div>
 
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Icon: {menu.icon}
-                </p>
+      {/* ERROR */}
 
-              </div>
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
-              <StatusBadge
-                active={menu.active}
-                deleted={menu.deleted}
-              />
+      {/* MAIN */}
 
-            </div>
+      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
 
-          </CardContent>
-        </Card>
+        {/* LEFT */}
 
-        {/* MENU INFORMATION */}
+        <div className="space-y-5">
 
-        <Card className="mb-6">
+          <Card>
 
-          <CardHeader>
-            <CardTitle>
-              Menu Information
-            </CardTitle>
-          </CardHeader>
+            <CardHeader>
 
-          <CardContent>
+              <CardTitle>
+                Menu Information
+              </CardTitle>
 
-            <div className="grid gap-6 sm:grid-cols-2">
+            </CardHeader>
 
-              <InfoItem
-                label="Display Name"
-                value={menu.displayName}
-              />
+            <CardContent>
 
-              <InfoItem
-                label="Icon"
-                value={menu.icon}
-              />
+              <div className="flex items-start gap-4">
 
-              <InfoItem
-                label="Display Order"
-                value={menu.displayOrder}
-              />
-
-              <InfoItem
-                label="Version"
-                value={menu.version}
-              />
-
-              <div className="sm:col-span-2">
-                <InfoItem
-                  label="Description"
-                  value={
-                    menu.description ||
-                    "No description provided"
+                <MenuIcon
+                  iconName={
+                    menu.icon
                   }
                 />
+
+                <div className="min-w-0">
+
+                  <h2 className="text-xl font-semibold">
+                    {menu.menuName}
+                  </h2>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {menu.icon ??
+                      "Menu"}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+
+                    <StatusBadge
+                      active={
+                        menu.active
+                      }
+                      deleted={
+                        menu.deleted
+                      }
+                    />
+
+                    {menu.sidebarId ? (
+                      <Badge variant="secondary">
+                        Sidebar Menu
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">
+                        Standalone Menu
+                      </Badge>
+                    )}
+
+                  </div>
+
+                </div>
+
               </div>
 
-            </div>
+            </CardContent>
 
-          </CardContent>
-        </Card>
+          </Card>
 
-        {/* AUDIT INFORMATION */}
+          <Card>
 
-        <Card>
+            <CardHeader>
 
-          <CardHeader>
-            <CardTitle>
-              Audit Information
-            </CardTitle>
-          </CardHeader>
+              <CardTitle>
+                Configuration
+              </CardTitle>
 
-          <CardContent>
+            </CardHeader>
 
-            <div className="grid gap-6 sm:grid-cols-2">
+            <CardContent>
 
-              <div className="flex gap-3">
-                <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="grid gap-6 sm:grid-cols-2">
 
                 <div>
+                  <InfoItem
+                    label="Menu Name"
+                    value={
+                      menu.menuName
+                    }
+                  />
+                </div>
+
+                <div>
+                  <InfoItem
+                    label="Display Order"
+                    value={
+                      menu.displayOrder
+                    }
+                  />
+                </div>
+
+                <div>
+                  <InfoItem
+                    label="Menu Type"
+                    value={
+                      menu.sidebarId
+                        ? "Sidebar Menu"
+                        : "Standalone Menu"
+                    }
+                  />
+                </div>
+
+                <div>
+                  <InfoItem
+                    label="Icon"
+                    value={
+                      menu.icon
+                    }
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+
+                  <InfoItem
+                    label="Description"
+                    value={
+                      menu.description ||
+                      "No description"
+                    }
+                  />
+
+                </div>
+
+              </div>
+
+            </CardContent>
+
+          </Card>
+
+          <Card>
+
+            <CardHeader>
+
+              <CardTitle>
+                Hierarchy
+              </CardTitle>
+
+            </CardHeader>
+
+            <CardContent>
+
+              {menu.sidebarId ? (
+                <div className="rounded-lg border bg-muted/20 p-4">
+
                   <p className="text-xs font-medium text-muted-foreground">
-                    Created At
+                    Parent Sidebar
+                  </p>
+
+                  <p className="mt-1 font-medium">
+                    {sidebar?.displayName ??
+                      sidebar?.sidebarName ??
+                      sidebar?.name ??
+                      menu.sidebarId}
+                  </p>
+
+                  <p className="mt-1 break-all text-xs text-muted-foreground">
+                    {menu.sidebarId}
+                  </p>
+
+                </div>
+              ) : (
+                <div className="rounded-lg border bg-muted/20 p-4">
+
+                  <p className="font-medium">
+                    Standalone Menu
+                  </p>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    This menu is not assigned to any sidebar.
+                  </p>
+
+                </div>
+              )}
+
+            </CardContent>
+
+          </Card>
+
+        </div>
+
+        {/* RIGHT */}
+
+        <div className="space-y-5">
+
+          <Card>
+
+            <CardHeader>
+
+              <CardTitle>
+                Audit Information
+              </CardTitle>
+
+            </CardHeader>
+
+            <CardContent className="space-y-5">
+
+              <div className="flex gap-3">
+
+                <CalendarDays className="mt-0.5 h-4 w-4 text-muted-foreground" />
+
+                <div>
+
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Created
                   </p>
 
                   <p className="mt-1 text-sm">
@@ -603,15 +791,19 @@ const ViewMenuPage = () => {
                       menu.createdAt
                     )}
                   </p>
+
                 </div>
+
               </div>
 
               <div className="flex gap-3">
-                <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+
+                <Clock3 className="mt-0.5 h-4 w-4 text-muted-foreground" />
 
                 <div>
+
                   <p className="text-xs font-medium text-muted-foreground">
-                    Updated At
+                    Last Updated
                   </p>
 
                   <p className="mt-1 text-sm">
@@ -619,27 +811,60 @@ const ViewMenuPage = () => {
                       menu.updatedAt
                     )}
                   </p>
+
                 </div>
+
               </div>
 
               <InfoItem
-                label="Menu ID"
-                value={menu.id}
+                label="Created By"
+                value={
+                  menu.createdBy
+                }
+              />
+
+              <InfoItem
+                label="Updated By"
+                value={
+                  menu.updatedBy
+                }
               />
 
               <InfoItem
                 label="Version"
-                value={menu.version}
+                value={
+                  menu.version
+                }
               />
 
-            </div>
+            </CardContent>
 
-          </CardContent>
-        </Card>
+          </Card>
+
+          <Card>
+
+            <CardHeader>
+
+              <CardTitle>
+                Menu ID
+              </CardTitle>
+
+            </CardHeader>
+
+            <CardContent>
+
+              <p className="break-all font-mono text-xs text-muted-foreground">
+                {menu.id}
+              </p>
+
+            </CardContent>
+
+          </Card>
+
+        </div>
 
       </div>
+
     </div>
   );
-};
-
-export default ViewMenuPage;
+}

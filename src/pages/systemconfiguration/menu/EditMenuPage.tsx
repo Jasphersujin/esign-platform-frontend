@@ -1,57 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import * as LucideIcons from "lucide-react";
 
 import {
-  Check,
-  ChevronDown,
   ArrowLeft,
+  ChevronDown,
   Loader2,
   Save,
 } from "lucide-react";
-
-import * as LucideIcons from "lucide-react";
 
 import {
   useNavigate,
   useParams,
 } from "react-router-dom";
-
-import {
-  useForm,
-} from "react-hook-form";
-
-import {
-  zodResolver,
-} from "@hookform/resolvers/zod";
-
-import * as z from "zod";
-
-import api from "@/api/api";
-
-import { Button } from "@/components/ui/button";
-
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-
-import {
-  Field,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/field";
-
-import { Input } from "@/components/ui/input";
-
-import { Textarea } from "@/components/ui/textarea";
-
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 
 import {
   Command,
@@ -61,34 +24,38 @@ import {
   CommandList,
 } from "@/components/ui/command";
 
-/* ============================================================
-   TYPES
-============================================================ */
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
-interface MenuResponse {
-  id: string;
-  displayName: string;
-  icon: string;
-  displayOrder: number;
-  description?: string | null;
-  active: boolean;
-  deleted: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  version?: number;
-}
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
-interface MenuFormValues {
-  displayName: string;
-  icon: string;
-  displayOrder: number;
-  description: string;
-}
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 
-interface ApiErrorResponse {
-  message?: string;
-  error?: string;
-}
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+import {
+  getMenuById,
+  updateMenu,
+} from "@/api/menu.api";
+
+import { getSidebars } from "@/api/sidebar.api";
 
 /* ============================================================
    ICONS
@@ -145,45 +112,96 @@ const ICON_NAMES = [
 ] as const;
 
 /* ============================================================
-   SCHEMA
+   TYPES
 ============================================================ */
 
-const menuSchema = z.object({
-  displayName: z
-    .string()
-    .trim()
-    .min(2, "Display name must be at least 2 characters")
-    .max(255, "Display name cannot exceed 255 characters"),
+interface SidebarOption {
+  id: string;
+  displayName?: string;
+  sidebarName?: string;
+  name?: string;
+  active?: boolean;
+}
 
-  icon: z
-    .string()
-    .trim()
-    .min(1, "Please select an icon")
-    .max(100, "Icon name cannot exceed 100 characters"),
+/* ============================================================
+   VALIDATION
+============================================================ */
 
-  displayOrder: z
-    .number()
-    .int("Display order must be a whole number")
-    .min(1, "Display order must be at least 1"),
+const menuSchema = z
+  .object({
+    menuName: z
+      .string()
+      .trim()
+      .min(2, "Menu name must be at least 2 characters")
+      .max(150, "Menu name cannot exceed 150 characters"),
 
-  description: z
-    .string()
-    .max(
-      1000,
-      "Description cannot exceed 1000 characters"
-    ),
-});
+    menuType: z.enum(["STANDALONE", "SIDEBAR"]),
+
+    sidebarId: z.string().optional(),
+
+    icon: z
+      .string()
+      .trim()
+      .min(1, "Please select an icon")
+      .max(150, "Icon cannot exceed 150 characters"),
+
+    displayOrder: z
+      .coerce
+      .number()
+      .int("Display order must be a whole number")
+      .min(0, "Display order cannot be negative"),
+
+    description: z
+      .string()
+      .max(5000, "Description cannot exceed 5000 characters"),
+  })
+  .superRefine((values, ctx) => {
+    if (
+      values.menuType === "SIDEBAR" &&
+      !values.sidebarId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sidebarId"],
+        message: "Please select a sidebar",
+      });
+    }
+  });
+
+type FormValues = z.infer<typeof menuSchema>;
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string
+) {
+  const e = error as {
+    response?: {
+      data?: {
+        message?: string;
+        error?: string;
+      };
+    };
+    message?: string;
+  };
+
+  return (
+    e.response?.data?.message ??
+    e.response?.data?.error ??
+    e.message ??
+    fallback
+  );
+}
 
 /* ============================================================
    ICON PREVIEW
 ============================================================ */
 
-function IconPreview({
-  iconName,
-}: {
-  iconName: string;
-}) {
-  const IconComponent =
+function IconPreview({ name }: { name: string }) {
+  const Icon =
     (
       LucideIcons as unknown as Record<
         string,
@@ -191,19 +209,11 @@ function IconPreview({
           className?: string;
         }>
       >
-    )[iconName];
-
-  if (!IconComponent) {
-    return (
-      <div className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted text-xs">
-        ?
-      </div>
-    );
-  }
+    )[name] ?? LucideIcons.Menu;
 
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-md border bg-primary/5 text-primary">
-      <IconComponent className="h-5 w-5" />
+    <div className="flex h-10 w-10 items-center justify-center rounded-md border bg-primary/5 text-primary">
+      <Icon className="h-5 w-5" />
     </div>
   );
 }
@@ -215,37 +225,85 @@ function IconPreview({
 const EditMenuPage = () => {
   const navigate = useNavigate();
 
-  const { id } =
-    useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>();
 
-  const [isLoading, setIsLoading] =
-    useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [isSubmitting, setIsSubmitting] =
-    useState<boolean>(false);
+  const [error, setError] = useState("");
 
-  const [submitError, setSubmitError] =
-    useState<string>("");
+  const [iconOpen, setIconOpen] = useState(false);
 
-  const [iconPickerOpen, setIconPickerOpen] =
-    useState<boolean>(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarSearch, setSidebarSearch] = useState("");
 
-  const form = useForm<MenuFormValues>({
+  const [sidebars, setSidebars] =
+    useState<SidebarOption[]>([]);
+
+  const [loadingSidebars, setLoadingSidebars] =
+    useState(false);
+
+  const form = useForm<FormValues>({
     resolver: zodResolver(menuSchema),
 
     defaultValues: {
-      displayName: "",
+      menuName: "",
+      menuType: "STANDALONE",
+      sidebarId: "",
       icon: "Menu",
-      displayOrder: 1,
+      displayOrder: 0,
       description: "",
     },
 
     mode: "onBlur",
-
     reValidateMode: "onChange",
   });
 
+  const menuType = form.watch("menuType");
+  const selectedSidebarId = form.watch("sidebarId");
   const selectedIcon = form.watch("icon");
+
+  const selectedSidebar = useMemo(
+    () =>
+      sidebars.find(
+        (sidebar) =>
+          sidebar.id === selectedSidebarId
+      ),
+    [sidebars, selectedSidebarId]
+  );
+
+  /* ==========================================================
+     LOAD SIDEBARS
+  ========================================================== */
+
+  useEffect(() => {
+    if (menuType !== "SIDEBAR") {
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      try {
+        setLoadingSidebars(true);
+
+        const response = await getSidebars({
+          search: sidebarSearch.trim() || undefined,
+          active: true,
+          page: 0,
+          size: 100,
+          sortBy: "displayOrder",
+          sortDirection: "ASC",
+        });
+
+        setSidebars(response.content ?? []);
+      } catch {
+        setSidebars([]);
+      } finally {
+        setLoadingSidebars(false);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [sidebarSearch, menuType]);
 
   /* ==========================================================
      LOAD MENU
@@ -253,56 +311,50 @@ const EditMenuPage = () => {
 
   useEffect(() => {
     if (!id) {
-      setSubmitError("Menu ID is missing.");
-      setIsLoading(false);
+      setError("Menu ID is missing.");
+      setLoading(false);
       return;
     }
 
-    const loadMenu =
-      async (): Promise<void> => {
-        try {
-          setIsLoading(true);
-          setSubmitError("");
+    const loadMenu = async () => {
+      try {
+        setLoading(true);
+        setError("");
 
-          const response =
-            await api.get<MenuResponse>(
-              `/api/v1/menus/${id}`
-            );
+        const menu = await getMenuById(id);
 
-          const menu =
-            response.data;
+        form.reset({
+          menuName: menu.menuName ?? "",
 
-          form.reset({
-            displayName:
-              menu.displayName,
+          menuType: menu.sidebarId
+            ? "SIDEBAR"
+            : "STANDALONE",
 
-            icon:
-              menu.icon || "Menu",
+          sidebarId: menu.sidebarId ?? "",
 
-            displayOrder:
-              menu.displayOrder,
+          icon: menu.icon ?? "Menu",
 
-            description:
-              menu.description ?? "",
-          });
-        } catch (error) {
-          const apiError = error as {
-            response?: {
-              data?: ApiErrorResponse;
-            };
-            message?: string;
-          };
+          displayOrder:
+            menu.displayOrder ?? 0,
 
-          setSubmitError(
-            apiError.response?.data?.message ??
-              apiError.response?.data?.error ??
-              apiError.message ??
-              "Failed to load menu."
-          );
-        } finally {
-          setIsLoading(false);
+          description:
+            menu.description ?? "",
+        });
+
+        if (menu.sidebarId) {
+          setSidebarSearch("");
         }
-      };
+      } catch (e) {
+        setError(
+          getErrorMessage(
+            e,
+            "Failed to load menu."
+          )
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
 
     void loadMenu();
   }, [id, form]);
@@ -311,53 +363,43 @@ const EditMenuPage = () => {
      SUBMIT
   ========================================================== */
 
-  const onSubmit = async (
-    values: MenuFormValues
-  ): Promise<void> => {
+  const onSubmit = async (values: FormValues) => {
     if (!id) {
+      setError("Menu ID is missing.");
       return;
     }
 
     try {
-      setIsSubmitting(true);
-      setSubmitError("");
+      setSubmitting(true);
+      setError("");
 
-      const payload = {
-        displayName:
-          values.displayName.trim(),
+      await updateMenu(id, {
+        menuName: values.menuName.trim(),
 
-        icon:
-          values.icon.trim(),
-
-        displayOrder:
-          values.displayOrder,
+        sidebarId:
+          values.menuType === "SIDEBAR"
+            ? values.sidebarId || null
+            : null,
 
         description:
           values.description.trim() || null,
-      };
 
-      await api.put(
-        `/api/v1/menus/${id}`,
-        payload
-      );
+        icon: values.icon.trim(),
 
-      navigate(`/menus/${id}`);
-    } catch (error) {
-      const apiError = error as {
-        response?: {
-          data?: ApiErrorResponse;
-        };
-        message?: string;
-      };
+        displayOrder:
+          values.displayOrder,
+      });
 
-      setSubmitError(
-        apiError.response?.data?.message ??
-          apiError.response?.data?.error ??
-          apiError.message ??
+      navigate("/menus");
+    } catch (e) {
+      setError(
+        getErrorMessage(
+          e,
           "Failed to update menu."
+        )
       );
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
@@ -365,57 +407,51 @@ const EditMenuPage = () => {
      LOADING
   ========================================================== */
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-7 w-7 animate-spin text-primary" />
-
-          <p className="text-sm text-muted-foreground">
-            Loading menu...
-          </p>
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Loading menu...
         </div>
       </div>
     );
   }
 
   /* ==========================================================
-     RENDER
+     UI
   ========================================================== */
 
   return (
     <div className="w-full min-w-0 bg-muted/20">
       <div className="w-full max-w-5xl p-4 sm:p-6">
 
-        {/* HEADER */}
+        {/* Back */}
+        <Button
+          type="button"
+          variant="ghost"
+          className="-ml-2 mb-3"
+          onClick={() => navigate("/menus")}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Menus
+        </Button>
 
+        {/* Header */}
         <div className="mb-6">
-          <Button
-            type="button"
-            variant="ghost"
-            className="-ml-2 mb-3"
-            onClick={() =>
-              navigate(`/menus/${id}`)
-            }
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Menu
-          </Button>
-
           <h1 className="text-2xl font-semibold tracking-tight">
             Edit Menu
           </h1>
 
           <p className="mt-1 text-sm text-muted-foreground">
-            Update menu information, icon, and display order.
+            Update menu details, hierarchy and display settings.
           </p>
         </div>
 
-        {/* ERROR */}
-
-        {submitError && (
+        {/* Error */}
+        {error && (
           <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {submitError}
+            {error}
           </div>
         )}
 
@@ -423,223 +459,387 @@ const EditMenuPage = () => {
           onSubmit={form.handleSubmit(onSubmit)}
           className="space-y-6"
         >
+          {/* =====================================================
+              MENU DETAILS
+          ===================================================== */}
 
           <Card>
             <CardHeader>
-              <CardTitle>
-                Menu Information
-              </CardTitle>
+              <CardTitle>Menu Details</CardTitle>
 
               <CardDescription>
-                Update the menu master information.
+                Update the basic configuration of this menu.
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-5">
+            <CardContent className="space-y-6">
 
-              <div className="grid gap-5 md:grid-cols-2">
+              {/* Menu Name */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Menu Name{" "}
+                  <span className="text-destructive">*</span>
+                </label>
 
-                {/* DISPLAY NAME */}
+                <Input
+                  placeholder="e.g. User Management"
+                  {...form.register("menuName")}
+                />
 
-                <Field>
-                  <FieldLabel>
-                    Display Name *
-                  </FieldLabel>
-
-                  <Input
-                    {...form.register("displayName")}
-                    disabled={isSubmitting}
-                  />
-
-                  <FieldError>
+                {form.formState.errors.menuName && (
+                  <p className="text-sm text-destructive">
                     {
-                      form.formState.errors
-                        .displayName?.message
+                      form.formState.errors.menuName
+                        .message
                     }
-                  </FieldError>
-                </Field>
+                  </p>
+                )}
+              </div>
 
-                {/* DISPLAY ORDER */}
+              {/* Menu Type */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Menu Type{" "}
+                  <span className="text-destructive">*</span>
+                </label>
 
-                <Field>
-                  <FieldLabel>
-                    Display Order *
-                  </FieldLabel>
+                <Controller
+                  name="menuType"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+
+                        if (value === "STANDALONE") {
+                          form.setValue(
+                            "sidebarId",
+                            ""
+                          );
+
+                          setSidebarSearch("");
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select menu type" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        <SelectItem value="STANDALONE">
+                          Standalone Menu
+                        </SelectItem>
+
+                        <SelectItem value="SIDEBAR">
+                          Sidebar Menu
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+
+              {/* Sidebar */}
+              {menuType === "SIDEBAR" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Sidebar{" "}
+                    <span className="text-destructive">*</span>
+                  </label>
+
+                  <Popover
+                    open={sidebarOpen}
+                    onOpenChange={setSidebarOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between"
+                      >
+                        <span className="truncate">
+                          {selectedSidebar?.displayName ??
+                            selectedSidebar?.sidebarName ??
+                            selectedSidebar?.name ??
+                            (selectedSidebarId ||
+                              "Select sidebar")}
+                        </span>
+
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+
+                    <PopoverContent
+                      align="start"
+                      className="w-[--radix-popover-trigger-width] p-0"
+                    >
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Search sidebar..."
+                          value={sidebarSearch}
+                          onValueChange={
+                            setSidebarSearch
+                          }
+                        />
+
+                        <CommandList>
+                          {loadingSidebars && (
+                            <div className="flex items-center justify-center py-6">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            </div>
+                          )}
+
+                          {!loadingSidebars && (
+                            <CommandEmpty>
+                              No active sidebars found.
+                            </CommandEmpty>
+                          )}
+
+                          {!loadingSidebars &&
+                            sidebars.map(
+                              (sidebar) => (
+                                <CommandItem
+                                  key={sidebar.id}
+                                  value={sidebar.id}
+                                  onSelect={() => {
+                                    form.setValue(
+                                      "sidebarId",
+                                      sidebar.id,
+                                      {
+                                        shouldValidate:
+                                          true,
+                                      }
+                                    );
+
+                                    setSidebarOpen(false);
+                                    setSidebarSearch("");
+                                  }}
+                                >
+                                  <div className="flex min-w-0 flex-col">
+                                    <span className="truncate font-medium">
+                                      {sidebar.displayName ??
+                                        sidebar.sidebarName ??
+                                        sidebar.name ??
+                                        sidebar.id}
+                                    </span>
+
+                                    <span className="truncate text-xs text-muted-foreground">
+                                      {sidebar.id}
+                                    </span>
+                                  </div>
+                                </CommandItem>
+                              )
+                            )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+
+                  {form.formState.errors.sidebarId && (
+                    <p className="text-sm text-destructive">
+                      {
+                        form.formState.errors.sidebarId
+                          .message
+                      }
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Icon + Display Order */}
+              <div className="grid gap-6 md:grid-cols-2">
+
+                {/* Icon */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Icon{" "}
+                    <span className="text-destructive">*</span>
+                  </label>
+
+                  <Popover
+                    open={iconOpen}
+                    onOpenChange={setIconOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          <IconPreview
+                            name={selectedIcon}
+                          />
+
+                          <span>
+                            {selectedIcon}
+                          </span>
+                        </div>
+
+                        <ChevronDown className="h-4 w-4 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+
+                    <PopoverContent
+                      align="start"
+                      className="w-[320px] p-0"
+                    >
+                      <Command>
+                        <CommandInput placeholder="Search icon..." />
+
+                        <CommandList>
+                          <CommandEmpty>
+                            No icon found.
+                          </CommandEmpty>
+
+                          {ICON_NAMES.map(
+                            (iconName) => {
+                              const Icon =
+                                (
+                                  LucideIcons as unknown as Record<
+                                    string,
+                                    React.ComponentType<{
+                                      className?: string;
+                                    }>
+                                  >
+                                )[iconName] ??
+                                LucideIcons.Menu;
+
+                              return (
+                                <CommandItem
+                                  key={iconName}
+                                  value={iconName}
+                                  onSelect={() => {
+                                    form.setValue(
+                                      "icon",
+                                      iconName,
+                                      {
+                                        shouldValidate:
+                                          true,
+                                      }
+                                    );
+
+                                    setIconOpen(false);
+                                  }}
+                                >
+                                  <Icon className="mr-2 h-4 w-4" />
+
+                                  {iconName}
+                                </CommandItem>
+                              );
+                            }
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+
+                  {form.formState.errors.icon && (
+                    <p className="text-sm text-destructive">
+                      {
+                        form.formState.errors.icon
+                          .message
+                      }
+                    </p>
+                  )}
+                </div>
+
+                {/* Display Order */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Display Order{" "}
+                    <span className="text-destructive">*</span>
+                  </label>
 
                   <Input
                     type="number"
-                    min={1}
+                    min={0}
                     {...form.register(
                       "displayOrder",
                       {
                         valueAsNumber: true,
                       }
                     )}
-                    disabled={isSubmitting}
                   />
 
-                  <FieldError>
-                    {
-                      form.formState.errors
-                        .displayOrder?.message
-                    }
-                  </FieldError>
-                </Field>
-
+                  {form.formState.errors.displayOrder && (
+                    <p className="text-sm text-destructive">
+                      {
+                        form.formState.errors
+                          .displayOrder.message
+                      }
+                    </p>
+                  )}
+                </div>
               </div>
 
-              {/* ICON */}
-
-              <Field>
-                <FieldLabel>
-                  Icon *
-                </FieldLabel>
-
-                <Popover
-                  open={iconPickerOpen}
-                  onOpenChange={setIconPickerOpen}
-                >
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full justify-between"
-                      disabled={isSubmitting}
-                    >
-                      <div className="flex items-center gap-3">
-                        <IconPreview
-                          iconName={selectedIcon}
-                        />
-
-                        <span>
-                          {selectedIcon}
-                        </span>
-                      </div>
-
-                      <ChevronDown className="h-4 w-4 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-
-                  <PopoverContent
-                    className="w-[320px] p-0"
-                    align="start"
-                  >
-                    <Command>
-                      <CommandInput
-                        placeholder="Search icon..."
-                      />
-
-                      <CommandList>
-                        <CommandEmpty>
-                          No icon found.
-                        </CommandEmpty>
-
-                        {ICON_NAMES.map(
-                          (iconName) => {
-                            const IconComponent =
-                              (
-                                LucideIcons as unknown as Record<
-                                  string,
-                                  React.ComponentType<{
-                                    className?: string;
-                                  }>
-                                >
-                              )[iconName];
-
-                            return (
-                              <CommandItem
-                                key={iconName}
-                                value={iconName}
-                                onSelect={() => {
-                                  form.setValue(
-                                    "icon",
-                                    iconName,
-                                    {
-                                      shouldValidate: true,
-                                    }
-                                  );
-
-                                  setIconPickerOpen(
-                                    false
-                                  );
-                                }}
-                              >
-                                <IconComponent className="mr-3 h-4 w-4" />
-
-                                {iconName}
-
-                                {selectedIcon ===
-                                  iconName && (
-                                  <Check className="ml-auto h-4 w-4" />
-                                )}
-                              </CommandItem>
-                            );
-                          }
-                        )}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-
-                <FieldError>
-                  {form.formState.errors.icon?.message}
-                </FieldError>
-              </Field>
-
-              {/* DESCRIPTION */}
-
-              <Field>
-                <FieldLabel>
+              {/* Description */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
                   Description
-                </FieldLabel>
+                </label>
 
                 <Textarea
-                  {...form.register("description")}
                   rows={5}
-                  disabled={isSubmitting}
+                  placeholder="Describe the purpose of this menu..."
+                  {...form.register("description")}
                 />
 
-                <FieldError>
-                  {
-                    form.formState.errors
-                      .description?.message
-                  }
-                </FieldError>
-              </Field>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Optional</span>
 
+                  <span>
+                    {form.watch("description")
+                      ?.length ?? 0}
+                    /5000
+                  </span>
+                </div>
+
+                {form.formState.errors.description && (
+                  <p className="text-sm text-destructive">
+                    {
+                      form.formState.errors.description
+                        .message
+                    }
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
 
-          {/* ACTIONS */}
+          {/* =====================================================
+              ACTIONS
+          ===================================================== */}
 
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-
+          <div className="flex items-center justify-end gap-3">
             <Button
               type="button"
               variant="outline"
-              onClick={() =>
-                navigate(`/menus/${id}`)
-              }
-              disabled={isSubmitting}
+              onClick={() => navigate("/menus")}
+              disabled={submitting}
             >
               Cancel
             </Button>
 
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={submitting}
             >
-              {isSubmitting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
               ) : (
-                <Save className="mr-2 h-4 w-4" />
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Update Menu
+                </>
               )}
-
-              Save Changes
             </Button>
-
           </div>
-
         </form>
       </div>
     </div>
